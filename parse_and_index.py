@@ -51,12 +51,19 @@ def main(argv=sys.argv):
     except FileNotFoundError:
         documents = []
 
+    for doc in documents:
+        doc.metadata["file_path"] = doc.metadata["file_path"].replace("\\", "/")
+
     docs_to_remove = []
 
     for doc in documents:
         file_path = DATABASE_PATH / doc.metadata["file_path"]
 
-        if not file_path.exists():
+        try:
+            if not file_path.exists():
+                docs_to_remove.append(doc)
+        except OSError as e:  # File path is too long exception
+            print(e)
             docs_to_remove.append(doc)
 
     doc_ids_to_remove = set()
@@ -114,6 +121,7 @@ def main(argv=sys.argv):
     for doc in new_documents:
         file_path = Path(doc.metadata["file_path"])
         doc.metadata["file_path"] = str(file_path.relative_to(DATABASE_PATH))
+        doc.metadata["file_path"] = doc.metadata["file_path"].replace("\\", "/")
         doc.excluded_llm_metadata_keys.remove("file_name")
 
     new_files = set()
@@ -175,13 +183,14 @@ def main(argv=sys.argv):
             existing_doc_hash = index.docstore.get_document_hash(
                 doc.get_doc_id())
 
-            if existing_doc_hash is None:
-                continue
-
             if existing_doc_hash == doc.hash:
                 continue
+            
+            if existing_doc_hash is None:
+                index.insert(doc)
+            else:
+                index.update_ref_doc(doc)
 
-            index.update_ref_doc(doc)
             refreshed_docs_count += 1
 
         print("Documents refreshed:", refreshed_docs_count)
@@ -191,3 +200,4 @@ def main(argv=sys.argv):
 
 if __name__ == "__main__":
     sys.exit(main())
+
