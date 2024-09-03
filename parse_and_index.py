@@ -38,7 +38,7 @@ def main(argv=sys.argv):
         model="text-embedding-3-large",
         embed_batch_size=256)
     Settings.llm=OpenAI(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         temperature=0,
         max_tokens=4096)
 
@@ -50,9 +50,6 @@ def main(argv=sys.argv):
 
     except FileNotFoundError:
         documents = []
-
-    for doc in documents:
-        doc.metadata["file_path"] = doc.metadata["file_path"].replace("\\", "/")
 
     docs_to_remove = []
 
@@ -120,8 +117,8 @@ def main(argv=sys.argv):
 
     for doc in new_documents:
         file_path = Path(doc.metadata["file_path"])
-        doc.metadata["file_path"] = str(file_path.relative_to(DATABASE_PATH))
-        doc.metadata["file_path"] = doc.metadata["file_path"].replace("\\", "/")
+        doc.metadata["file_path"] \
+            = str(file_path.relative_to(DATABASE_PATH)).replace("\\", "/")
         doc.excluded_llm_metadata_keys.remove("file_name")
 
     new_files = set()
@@ -158,42 +155,23 @@ def main(argv=sys.argv):
             storage_context=storage_context,
             show_progress=True)
 
-    else:
-        index = VectorStoreIndex.from_vector_store(
-            vector_store,
-            storage_context=storage_context)
+        print("Done!")
 
-        print("Remove index for deleted files")
+        return
 
-        for doc_id in tqdm(doc_ids_to_remove):
-            index.delete_ref_doc(doc_id, delete_from_docstore=True)
+    index = VectorStoreIndex.from_vector_store(
+        vector_store,
+        storage_context=storage_context)
 
-        print("Add index for new files")
+    print("Remove index for deleted files")
 
-        for doc in tqdm(new_documents):
-            index.insert(doc)
+    for doc_id in tqdm(doc_ids_to_remove):
+        index.delete_ref_doc(doc_id, delete_from_docstore=True)
 
-        print("Refresh index for existing files")
+    print("Add index for new files")
 
-        # index.refresh_ref_docs(documents)
-
-        refreshed_docs_count = 0
-
-        for doc in tqdm(documents):
-            existing_doc_hash = index.docstore.get_document_hash(
-                doc.get_doc_id())
-
-            if existing_doc_hash == doc.hash:
-                continue
-            
-            if existing_doc_hash is None:
-                index.insert(doc)
-            else:
-                index.update_ref_doc(doc)
-
-            refreshed_docs_count += 1
-
-        print("Documents refreshed:", refreshed_docs_count)
+    for doc in tqdm(new_documents):
+        index.insert(doc)
 
     print("Done!")
 
