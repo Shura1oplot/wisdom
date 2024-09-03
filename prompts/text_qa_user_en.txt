@@ -1,0 +1,29 @@
+# Instructions:
+
+<instructions>
+Given the context information and NOT your prior knowledge, answer the query. First, provide your step-by-step reasoning wrapped in <reasoning> and </reasoning> XML tags. Then, synthesize your final answer and enclose it in <answer> and </answer> XML tags. Wrap other important information (not reasoning and not the final answer) in <comment> and </comment> XML tags in the end if needed.
+</instructions>
+
+---------------------
+
+# Context:
+
+<context_information>
+{context_str}
+</context_information>
+
+---------------------
+
+# Query:
+
+<query>
+{query_str}
+</query>
+
+---------------------
+
+# Answer:
+
+Now provide your answer below.
+
+<answer>

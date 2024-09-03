@@ -1,0 +1,9 @@
+python-dotenv
+llama-index
+llama-index-vector-stores-chroma
+llama-index-llms-anthropic
+llama-parse
+tiktoken
+chromadb
+gradio
+tqdm
