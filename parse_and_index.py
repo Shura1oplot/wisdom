@@ -173,27 +173,27 @@ def main(argv=sys.argv):
         for doc in tqdm(new_documents):
             index.insert(doc)
 
-        print("Refresh index for existing files")
+        # print("Refresh index for existing files")
 
         # index.refresh_ref_docs(documents)
 
-        refreshed_docs_count = 0
+        # refreshed_docs_count = 0
 
-        for doc in tqdm(documents):
-            existing_doc_hash = index.docstore.get_document_hash(
-                doc.get_doc_id())
+        # for doc in tqdm(documents):
+        #     existing_doc_hash = index.docstore.get_document_hash(
+        #         doc.get_doc_id())
 
-            if existing_doc_hash == doc.hash:
-                continue
+        #     if existing_doc_hash == doc.hash:
+        #         continue
             
-            if existing_doc_hash is None:
-                index.insert(doc)
-            else:
-                index.update_ref_doc(doc)
+        #     if existing_doc_hash is None:
+        #         index.insert(doc)
+        #     else:
+        #         index.update_ref_doc(doc)
 
-            refreshed_docs_count += 1
+        #     refreshed_docs_count += 1
 
-        print("Documents refreshed:", refreshed_docs_count)
+        # print("Documents refreshed:", refreshed_docs_count)
 
     print("Done!")
 
