@@ -318,7 +318,7 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
             outputs=[out_response, out_docs, out_cost])
 
         def out_docs_select_callback(evt: gr.SelectData):
-            return str(DATABASE_PATH / evt.value)
+            return str(DATABASE_PATH / evt.value.replace("\\", "/"))
 
         out_docs.select(
             fn=out_docs_select_callback,
@@ -326,8 +326,11 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
 
     ############################################################################
 
-    demo.launch()
+    demo.launch(root_path="/wisdom",
+                auth=[(os.environ["GRADIO_AUTH_USER"],
+                       os.environ["GRADIO_AUTH_PASS"])])
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
