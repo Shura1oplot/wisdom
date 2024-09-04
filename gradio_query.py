@@ -70,15 +70,24 @@ def create_prompts(lang):
         value = kwargs["existing_answer"]
 
         for tag in ("refined_answer", "уточненный_ответ"):  # FIXME
-            if f"<{tag}>" in value and "</{tag}>" in value:
-                orig_value = value
+            if f"<{tag}>" not in value:
+                continue
+
+            orig_value = value
+
+            if f"</{tag}>" in value:
                 _, value = value.split(f"<{tag}>", 2)
                 value, _ = value.split(f"</{tag}>", 2)
+                value = value.strip()
 
-                if not value:
-                    value = orig_value
+            else:
+                _, value = value.split(f"<{tag}>", 2)
+                value = value.strip()
 
-                break
+            if not value:
+                value = orig_value
+
+            break
 
         return value
 
@@ -216,16 +225,24 @@ def index_query(index, prompt, similarity_top_k, model):
     response = response_obj.response
 
     for tag in ("answer", "ответ"):  # FIXME
-        if f"<{tag}>" in response and f"</{tag}>" in response:
-            orig_response = response
+        if f"<{tag}>" not in response:
+            continue
+
+        orig_response = response
+
+        if f"</{tag}>" in response:
             _, response = response.split(f"<{tag}>", 2)
             response, _ = response.split(f"</{tag}>", 2)
             response = response.strip()
 
-            if not response:
-                response = orig_response
+        else:
+            _, response = response.split(f"<{tag}>", 2)
+            response = response.strip()
 
-            break
+        if not response:
+            response = orig_response
+
+        break
 
     mentioned_docs = set()
 

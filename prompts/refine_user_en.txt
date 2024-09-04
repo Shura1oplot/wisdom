@@ -42,6 +42,7 @@ Start with providing your step-by-step reasoning wrapped in <reasoning> and </re
 Now provide your reasoning and a refined answer below.
 
 ## Example:
+
 <reasoning>
 ...step by step analysis of the original answer and the new context...
 </reasoning>
@@ -50,6 +51,6 @@ Now provide your reasoning and a refined answer below.
 ...rewritten answer using the new context OR the original answer if the new context is not useful...
 </refined_answer>
 
-Let's begin.
+End of example.
 
-<reasoning>
+Let's begin.

@@ -56,11 +56,7 @@ def main(argv=sys.argv):
     for doc in documents:
         file_path = DATABASE_PATH / doc.metadata["file_path"]
 
-        try:
-            if not file_path.exists():
-                docs_to_remove.append(doc)
-        except OSError as e:  # File path is too long exception
-            print(e)
+        if not file_path.exists():
             docs_to_remove.append(doc)
 
     doc_ids_to_remove = set()
