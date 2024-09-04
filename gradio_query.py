@@ -167,10 +167,10 @@ def index_query(index, prompt, similarity_top_k, model):
                 embed_model=embed_model,
                 text_qa_template=text_qa_template,
                 refine_template=refine_template,
-                tokenizer=llm.tokenizer)
+                tokenizer=Anthropic().tokenizer)
 
             token_counter = TokenCountingHandler(
-                tokenizer=llm.tokenizer.encode)
+                tokenizer=Anthropic().tokenizer.encode)
             query_engine.callback_manager.add_handler(token_counter)
 
         elif model.startswith("gpt-"):
@@ -211,8 +211,11 @@ def index_query(index, prompt, similarity_top_k, model):
     gr.Info(f"Estimated cost is ${estimated_cost:.4f}")
 
     if estimated_cost >= COST_THRESHOLD:
-        raise gr.Error((f"Estimated cost of ${estimated_cost:.2f} is above the "
-                        f"allowed threshold ${COST_THRESHOLD:.2f}"))
+        raise gr.Error((f"""\
+Estimated cost of ${estimated_cost:.2f} is above the allowed \
+threshold ${COST_THRESHOLD:.2f}. Try cheaper models (claude-3-haiku \
+or gpt-4o-mini) or decrease index similarity top_k parameter.\
+"""))
 
     query_engine, token_counter = get_query_engine(mock=False)
 
@@ -320,14 +323,14 @@ with 10 or 100 and then adjust to your needs.\
             in_model = gr.Dropdown(
                 label="Model",
                 info="""\
-Try different models. Start with gpt-4o-mini. Pay attention to costs charged. \
+Try different models. Start with claude-3-haiku. Pay attention to costs charged. \
 It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
 """,
                choices=["gpt-4o-mini-2024-07-18",
                         "gpt-4o-2024-08-06",
                         "claude-3-haiku-20240307",
                         "claude-3-5-sonnet-20240620"],
-                value="gpt-4o-mini-2024-07-18")
+                value="claude-3-haiku-20240307")
 
         btn_submit.click(
             fn=partial(index_query, index),
