@@ -27,6 +27,10 @@ Start with providing your step-by-step reasoning wrapped in <reasoning> and </re
 {query_str}
 </query>
 
+<extra_instructions>
+{extra_instructions}
+</extra_instructions>
+
 ---------------------
 
 # Original answer:

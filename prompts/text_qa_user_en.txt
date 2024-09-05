@@ -20,6 +20,10 @@ Given the context information and NOT your prior knowledge, answer the query. Fi
 {query_str}
 </query>
 
+<extra_instructions>
+{extra_instructions}
+</extra_instructions>
+
 ---------------------
 
 # Answer:

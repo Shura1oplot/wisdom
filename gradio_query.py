@@ -132,8 +132,12 @@ def calculate_cost(model, token_counter):
         token_counter.completion_llm_token_count * pricing[model][1] / 1_000_000
 
 
-async def index_query(index, prompt, similarity_top_k, model):
-    if not prompt:
+async def index_query(index,
+                      question,
+                      extra_instructions,
+                      similarity_top_k,
+                      model):
+    if not question:
         return ""
 
     if similarity_top_k is None:
@@ -143,7 +147,10 @@ async def index_query(index, prompt, similarity_top_k, model):
         raise gr.Error("'Model' cannot be empty")
 
     text_qa_template, refine_template \
-        = create_prompts(detect_language(prompt))
+        = create_prompts(detect_language(question))
+
+    text_qa_template = text_qa_template.partial_format(
+        extra_instructions=extra_instructions)
 
     def get_query_engine(mock=False):
         if model.startswith("claude-"):
@@ -203,7 +210,7 @@ async def index_query(index, prompt, similarity_top_k, model):
         return query_engine, token_counter
 
     query_engine, token_counter = get_query_engine(mock=True)
-    await query_engine.aquery(prompt)
+    await query_engine.aquery(question)
 
     estimated_cost = calculate_cost(model, token_counter)
 
@@ -219,7 +226,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     query_engine, token_counter = get_query_engine(mock=False)
 
     try:
-        response_obj = await query_engine.aquery(prompt)
+        response_obj = await query_engine.aquery(question)
     except Exception as e:
         real_cost = calculate_cost(model, token_counter)
         return f"LlamaIndex Error:\n\n{e}", [], real_cost
@@ -257,7 +264,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     real_cost = calculate_cost(model, token_counter)
 
-    return response, mentioned_docs, real_cost
+    return response, mentioned_docs, real_cost, None
 
 
 ################################################################################
@@ -285,18 +292,21 @@ def main(argv=sys.argv):
                     out_response = gr.TextArea(
                         label="LLM response")
 
-                    in_request = gr.Textbox(
-                        label="Request prompt")
+                    in_question = gr.Textbox(
+                        label="Question")
+
+                    in_instructions = gr.Textbox(
+                        label="Additional instructions")
 
                     btn_submit = gr.Button("Submit")
 
                     gr.Examples(
                         examples=[
-                            ("Find presentations about safety stock management. "
+                            ("Find presentations about safety stock management.",
                              "Provide at least 20 presentations."),
-                            ("Найди материалы по стратегическим фреймворкам. "
+                            ("Найди материалы по стратегическим фреймворкам.",
                              "Приведи не менее 10 презентаций.")],
-                        inputs=[in_request],
+                        inputs=[in_question, in_instructions],
                     )
 
                 with gr.Column():  # Documents
@@ -338,8 +348,8 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
 
         btn_submit.click(
             fn=fn,
-            inputs=[in_request, in_top_k, in_model],
-            outputs=[out_response, out_docs, out_cost])
+            inputs=[in_question, in_instructions, in_top_k, in_model],
+            outputs=[out_response, out_docs, out_cost, out_file])
 
         def out_docs_select_callback(evt: gr.SelectData):
             return str(DATABASE_PATH / evt.value.replace("\\", "/"))
