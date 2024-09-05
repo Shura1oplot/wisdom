@@ -203,7 +203,7 @@ async def index_query(index, prompt, similarity_top_k, model):
         return query_engine, token_counter
 
     query_engine, token_counter = get_query_engine(mock=True)
-    query_engine.query(prompt)
+    await query_engine.aquery(prompt)
 
     estimated_cost = calculate_cost(model, token_counter)
 
