@@ -293,7 +293,8 @@ def main(argv=sys.argv):
 
                     gr.Examples(
                         examples=[
-                            "Find presentations about safety stock management.",
+                            ("Find presentations about safety stock management. "
+                             "Provide at least 20 presentations."),
                             ("Найди материалы по стратегическим фреймворкам. "
                              "Приведи не менее 10 презентаций.")],
                         inputs=[in_request],
