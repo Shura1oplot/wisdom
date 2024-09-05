@@ -294,7 +294,8 @@ def main(argv=sys.argv):
                     gr.Examples(
                         examples=[
                             "Find presentations about safety stock management.",
-                            "Find presentations about network modeling."],
+                            ("Найди материалы по стратегическим фреймворкам."
+                             "Приведи не менее 10 презентаций.")],
                         inputs=[in_request],
                     )
 
@@ -330,7 +331,7 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                         "gpt-4o-2024-08-06",
                         "claude-3-haiku-20240307",
                         "claude-3-5-sonnet-20240620"],
-                value="claude-3-haiku-20240307")
+                value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
         btn_submit.click(
             fn=partial(index_query, index),
