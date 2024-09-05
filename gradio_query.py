@@ -152,6 +152,9 @@ async def index_query(index,
     text_qa_template = text_qa_template.partial_format(
         extra_instructions=extra_instructions)
 
+    refine_template = refine_template.partial_format(
+        extra_instructions=extra_instructions)
+
     def get_query_engine(mock=False):
         if model.startswith("claude-"):
             if mock:
@@ -302,10 +305,10 @@ def main(argv=sys.argv):
 
                     gr.Examples(
                         examples=[
-                            ("Find presentations about safety stock management.",
-                             "Provide at least 20 presentations."),
-                            ("Найди материалы по стратегическим фреймворкам.",
-                             "Приведи не менее 10 презентаций.")],
+                            ["Find presentations about safety stock management.",
+                             "Provide at least 20 presentations."],
+                            ["Найди материалы по стратегическим фреймворкам.",
+                             "Приведи не менее 10 презентаций."]],
                         inputs=[in_question, in_instructions],
                     )
 
