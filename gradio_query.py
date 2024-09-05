@@ -2,7 +2,6 @@
 
 import sys
 import os
-from functools import partial
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -133,7 +132,7 @@ def calculate_cost(model, token_counter):
         token_counter.completion_llm_token_count * pricing[model][1] / 1_000_000
 
 
-def index_query(index, prompt, similarity_top_k, model):
+async def index_query(index, prompt, similarity_top_k, model):
     if not prompt:
         return ""
 
@@ -220,7 +219,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     query_engine, token_counter = get_query_engine(mock=False)
 
     try:
-        response_obj = query_engine.query(prompt)
+        response_obj = await query_engine.aquery(prompt)
     except Exception as e:
         real_cost = calculate_cost(model, token_counter)
         return f"LlamaIndex Error:\n\n{e}", [], real_cost
@@ -334,8 +333,11 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                         "claude-3-5-sonnet-20240620"],
                 value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
+        async def fn(*args):
+            return await index_query(index, *args)
+
         btn_submit.click(
-            fn=partial(index_query, index),
+            fn=fn,
             inputs=[in_request, in_top_k, in_model],
             outputs=[out_response, out_docs, out_cost])
 
@@ -348,6 +350,7 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
 
     ############################################################################
 
+    demo.queue(default_concurrency_limit=20)
     demo.launch(root_path="/wisdom",
                 auth=[(os.environ["GRADIO_AUTH_USER"],
                        os.environ["GRADIO_AUTH_PASS"])])
