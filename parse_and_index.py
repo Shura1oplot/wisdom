@@ -101,15 +101,19 @@ def main(argv=sys.argv):
         page_suffix="\n\nSlide: {pageNumber}",
         verbose=False)
 
-    new_documents = SimpleDirectoryReader(
-        input_dir=str(DATABASE_PATH),
-        recursive=True,
-        required_exts=[".pdf", ".ppt", ".pptx"],
-        file_extractor={".pdf": parser,
-                        ".ppt": parser,
-                        ".pptx": parser},
-        exclude=files_to_exclude,
-    ).load_data(show_progress=True)  # num_workers=4
+    try:
+        new_documents = SimpleDirectoryReader(
+            input_dir=str(DATABASE_PATH),
+            recursive=True,
+            required_exts=[".pdf", ".ppt", ".pptx"],
+            file_extractor={".pdf": parser,
+                            ".ppt": parser,
+                            ".pptx": parser},
+            exclude=files_to_exclude,
+        ).load_data(show_progress=True)  # num_workers=4
+    except ValueError as e:
+        print(e)  # ValueError: No files found in ...
+        new_documents = []
 
     for doc in new_documents:
         file_path = Path(doc.metadata["file_path"])
