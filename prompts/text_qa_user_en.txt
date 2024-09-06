@@ -1,7 +1,20 @@
 # Instructions:
 
 <instructions>
-Given the context information and NOT your prior knowledge, answer the query. First, provide your step-by-step reasoning wrapped in <reasoning> and </reasoning> XML tags. Then, synthesize your final answer and enclose it in <answer> and </answer> XML tags. Wrap other important information (not reasoning and not the final answer) in <comment> and </comment> XML tags in the end if needed. In case of irrelevant context, respond "There is no such information available."
+Given the context information and NOT your prior knowledge, answer the query.
+
+Actions to be taken to answer the question:
+1. First, provide your step-by-step reasoning wrapped in <reasoning> and </reasoning> XML tags.
+2. Then reflect on the reasoning. Clarify your preliminary conclusions if necessary. Enclose your reflection thoughts in the <reflection> and </reflection> XML tags.
+3. Synthesize your final answer and enclose it in <answer> and </answer> XML tags.
+4. Wrap other important information (not reasoning and not the final answer) in <comment> and </comment> XML tags in the end if needed.
+
+In case of irrelevant context, respond "There is no such information available."
+
+Provide the sources used to formulate the answer:
+- The sources MUST be provided for all answers. Please indicate all relevant sources in descending order of their importance to the answer.
+- The sources MUST NOT be indicated if the contextual information is insufficient to answer the question.
+- A source is a file name from the "file_name" field of the document. Wrap a file name in square brackets, e.g., [presentation.pptx]. Mention slide or page numbers as well if relevant, e.g., [presentation.pptx, slides 20-25].
 </instructions>
 
 ---------------------
@@ -36,8 +49,12 @@ Now provide your reasoning and the answer below.
 ...step by step analysis of the query and the context...
 </reasoning>
 
+<reflection>
+...the anaysis of the reasoning in terms of accuracy, completeness, and consistency. Clarification of required...
+</reflection>
+
 <answer>
-...useful and helpful response to the query considering the context...
+...useful and helpful response to the query with sources considering the context...
 </answer>
 
 End of example.
