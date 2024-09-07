@@ -23,6 +23,10 @@ from llama_index.core.callbacks import TokenCountingHandler
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core import ChatPromptTemplate
 
+from llama_index.postprocessor.cohere_rerank import CohereRerank
+
+from llama_index.core.types import BaseOutputParser
+
 import chromadb
 
 import tiktoken
@@ -55,67 +59,6 @@ def load_prompt(type_, role, lang):
         return fp.read()
 
 
-def create_prompts(lang):
-    text_qa_template = ChatPromptTemplate([
-        ChatMessage(
-            role=MessageRole.SYSTEM,
-            content=load_prompt("text_qa", "system", lang),
-        ),
-        ChatMessage(
-            role=MessageRole.USER,
-            content=load_prompt("text_qa", "user", lang))])
-
-    def existing_answer_extract(**kwargs):
-        value = kwargs["existing_answer"]
-
-        for tag in ("refined_answer", "уточненный_ответ"):  # FIXME
-            if f"<{tag}>" not in value:
-                continue
-
-            orig_value = value
-
-            if f"</{tag}>" in value:
-                _, value = value.split(f"<{tag}>", 2)
-                value, _ = value.split(f"</{tag}>", 2)
-                value = value.strip()
-
-            else:
-                _, value = value.split(f"<{tag}>", 2)
-                value = value.strip()
-
-            if not value:
-                value = orig_value
-
-            break
-
-        return value
-
-    refine_template = ChatPromptTemplate([
-        ChatMessage(
-            role=MessageRole.SYSTEM,
-            content=load_prompt("refine", "system", lang),
-        ),
-        ChatMessage(
-            role=MessageRole.USER,
-            content=load_prompt("refine", "user", lang))],
-        function_mappings={"existing_answer": existing_answer_extract})
-
-    return text_qa_template, refine_template
-
-
-def detect_language(prompt):
-    abc_ru = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
-    abc_ru = set(abc_ru) | set(abc_ru.upper())
-
-    for c in prompt:
-        if c in abc_ru:
-            return "ru"
-
-    return "en"
-
-################################################################################
-
-
 def calculate_cost(model, token_counter):
     # https://openai.com/api/pricing/
     # https://www.anthropic.com/pricing#anthropic-api
@@ -126,10 +69,44 @@ def calculate_cost(model, token_counter):
 
     pricing_embedding = 0.130  # text-embedding-3-large
 
+    # https://cohere.com/pricing
+    cohere_cost = 2 / 1000
+
     return token_counter.total_embedding_token_count * pricing_embedding \
         / 1_000_000 + \
-        token_counter.prompt_llm_token_count * pricing[model][0] / 1_000_000 + \
-        token_counter.completion_llm_token_count * pricing[model][1] / 1_000_000
+        token_counter.prompt_llm_token_count * pricing[model][0] \
+        / 1_000_000 + \
+        token_counter.completion_llm_token_count * pricing[model][1] \
+        / 1_000_000 + \
+        cohere_cost
+
+
+class OutputParser(BaseOutputParser):
+
+    def parse(self, output):
+        for tag in ("refined_answer", "уточненный_ответ", "answer", "ответ"):
+            if f"<{tag}>" not in output:
+                continue
+
+            orig_output = output
+
+            if f"</{tag}>" in output:
+                _, output = output.split(f"<{tag}>", 2)
+                output, _ = output.split(f"</{tag}>", 2)
+                output = output.strip()
+
+            else:
+                _, output = output.split(f"<{tag}>", 2)
+                output = output.strip()
+
+            if not output:
+                output = orig_output
+                continue
+
+        return output
+
+    def format(self, query):
+        raise NotADirectoryError()
 
 
 async def index_query(index,
@@ -143,76 +120,72 @@ async def index_query(index,
     if similarity_top_k is None:
         raise gr.Error("'Index similarity top_k' should be greater than 0")
 
+    similarity_top_k = int(similarity_top_k)
+
     if not model:
         raise gr.Error("'Model' cannot be empty")
 
-    text_qa_template, refine_template \
-        = create_prompts(detect_language(question))
+    language = "en"
+
+    abc_ru = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+    abc_ru = set(abc_ru) | set(abc_ru.upper())
+
+    for c in question:
+        if c in abc_ru:
+            language = "ru"
+            break
+
+    text_qa_template = ChatPromptTemplate([
+        ChatMessage(
+            role=MessageRole.SYSTEM,
+            content=load_prompt("text_qa", "system", language),
+        ),
+        ChatMessage(
+            role=MessageRole.USER,
+            content=load_prompt("text_qa", "user", language))])
 
     text_qa_template = text_qa_template.partial_format(
         extra_instructions=extra_instructions)
 
+    refine_template = ChatPromptTemplate([
+        ChatMessage(
+            role=MessageRole.SYSTEM,
+            content=load_prompt("refine", "system", language)),
+        ChatMessage(
+            role=MessageRole.USER,
+            content=load_prompt("refine", "user", language))])
+
     refine_template = refine_template.partial_format(
         extra_instructions=extra_instructions)
 
-    def get_query_engine(mock=False):
-        if model.startswith("claude-"):
-            if mock:
-                llm = MockLLM(max_tokens=512)
-                embed_model = MockEmbedding(embed_dim=3072)
+    if model.startswith("claude-"):
+        query_engine = index.as_query_engine(
+            similarity_top_k=similarity_top_k,
+            llm=MockLLM(max_tokens=512),
+            embed_model=MockEmbedding(embed_dim=3072),
+            text_qa_template=text_qa_template,
+            refine_template=refine_template,
+            tokenizer=Anthropic().tokenizer)
 
-            else:
-                llm = Anthropic(
-                    model=model,
-                    temperature=0,
-                    max_tokens=4096)
-                embed_model = OpenAIEmbedding(
-                    model="text-embedding-3-large",
-                    embed_batch_size=256)
+        token_counter = TokenCountingHandler(
+            tokenizer=Anthropic().tokenizer.encode)
+        query_engine.callback_manager.add_handler(token_counter)
 
-            query_engine = index.as_query_engine(
-                similarity_top_k=int(similarity_top_k),
-                llm=llm,
-                embed_model=embed_model,
-                text_qa_template=text_qa_template,
-                refine_template=refine_template,
-                tokenizer=Anthropic().tokenizer)
+    elif model.startswith("gpt-"):
+        query_engine = index.as_query_engine(
+            similarity_top_k=int(similarity_top_k),
+            llm=MockLLM(max_tokens=512),
+            embed_model=MockEmbedding(embed_dim=3072),
+            text_qa_template=text_qa_template,
+            refine_template=refine_template)
 
-            token_counter = TokenCountingHandler(
-                tokenizer=Anthropic().tokenizer.encode)
-            query_engine.callback_manager.add_handler(token_counter)
+        token_counter = TokenCountingHandler(
+            tokenizer=tiktoken.encoding_for_model(model).encode)
+        query_engine.callback_manager.add_handler(token_counter)
 
-        elif model.startswith("gpt-"):
-            if mock:
-                llm = MockLLM(max_tokens=512)
-                embed_model = MockEmbedding(embed_dim=3072)
+    else:
+        raise ValueError(model)
 
-            else:
-                llm = OpenAI(
-                    model=model,
-                    temperature=0,
-                    max_tokens=4096)
-                embed_model = OpenAIEmbedding(
-                    model="text-embedding-3-large",
-                    embed_batch_size=256)
-
-            query_engine = index.as_query_engine(
-                similarity_top_k=int(similarity_top_k),
-                llm=llm,
-                embed_model=embed_model,
-                text_qa_template=text_qa_template,
-                refine_template=refine_template)
-
-            token_counter = TokenCountingHandler(
-                tokenizer=tiktoken.encoding_for_model(model).encode)
-            query_engine.callback_manager.add_handler(token_counter)
-
-        else:
-            raise ValueError(model)
-
-        return query_engine, token_counter
-
-    query_engine, token_counter = get_query_engine(mock=True)
     await query_engine.aquery(question)
 
     estimated_cost = calculate_cost(model, token_counter)
@@ -226,7 +199,55 @@ threshold ${COST_THRESHOLD:.2f}. Try cheaper models (claude-3-haiku \
 or gpt-4o-mini) or decrease index similarity top_k parameter.\
 """))
 
-    query_engine, token_counter = get_query_engine(mock=False)
+    if language == "en":
+        cohere_model = "rerank-english-v3.0"
+    else:
+        cohere_model = "rerank-multilingual-v3.0"
+
+    cohere_rerank = CohereRerank(model=cohere_model,
+                                 top_n=similarity_top_k)
+
+    if model.startswith("claude-"):
+        query_engine = index.as_query_engine(
+            similarity_top_k=similarity_top_k,
+            llm=Anthropic(
+                model=model,
+                temperature=0,
+                max_tokens=4096,
+                output_parser=OutputParser),
+            embed_model=OpenAIEmbedding(
+                model="text-embedding-3-large",
+                embed_batch_size=256),
+            text_qa_template=text_qa_template,
+            refine_template=refine_template,
+            tokenizer=Anthropic().tokenizer,
+            node_postprocessors=[cohere_rerank])
+
+        token_counter = TokenCountingHandler(
+            tokenizer=Anthropic().tokenizer.encode)
+        query_engine.callback_manager.add_handler(token_counter)
+
+    elif model.startswith("gpt-"):
+        query_engine = index.as_query_engine(
+            similarity_top_k=similarity_top_k,
+            llm=OpenAI(
+                model=model,
+                temperature=0,
+                max_tokens=4096,
+                output_parser=OutputParser),
+            embed_model=OpenAIEmbedding(
+                model="text-embedding-3-large",
+                embed_batch_size=256),
+            text_qa_template=text_qa_template,
+            refine_template=refine_template,
+            node_postprocessors=[cohere_rerank])
+
+        token_counter = TokenCountingHandler(
+            tokenizer=tiktoken.encoding_for_model(model).encode)
+        query_engine.callback_manager.add_handler(token_counter)
+
+    else:
+        raise ValueError(model)
 
     try:
         response_obj = await query_engine.aquery(question)
@@ -235,26 +256,6 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
         return f"LlamaIndex Error:\n\n{e}", [], real_cost
 
     response = response_obj.response
-
-    for tag in ("answer", "ответ"):  # FIXME
-        if f"<{tag}>" not in response:
-            continue
-
-        orig_response = response
-
-        if f"</{tag}>" in response:
-            _, response = response.split(f"<{tag}>", 2)
-            response, _ = response.split(f"</{tag}>", 2)
-            response = response.strip()
-
-        else:
-            _, response = response.split(f"<{tag}>", 2)
-            response = response.strip()
-
-        if not response:
-            response = orig_response
-
-        break
 
     mentioned_docs = set()
 
@@ -371,4 +372,3 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
 
 if __name__ == "__main__":
     sys.exit(main())
-
