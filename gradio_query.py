@@ -105,9 +105,6 @@ class OutputParser(BaseOutputParser):
 
         return output
 
-    def format(self, query):
-        raise NotADirectoryError()
-
 
 async def index_query(index,
                       question,
@@ -214,7 +211,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 model=model,
                 temperature=0,
                 max_tokens=4096,
-                output_parser=OutputParser),
+                output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
                 model="text-embedding-3-large",
                 embed_batch_size=256),
@@ -234,7 +231,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 model=model,
                 temperature=0,
                 max_tokens=4096,
-                output_parser=OutputParser),
+                output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
                 model="text-embedding-3-large",
                 embed_batch_size=256),
