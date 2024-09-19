@@ -23,9 +23,12 @@ from llama_index.core.callbacks import TokenCountingHandler
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core import ChatPromptTemplate
 
-from llama_index.postprocessor.cohere_rerank import CohereRerank
-
 from llama_index.core.types import BaseOutputParser
+
+from llama_index.core.bridge.pydantic import Field
+from llama_index.core.postprocessor.types import BaseNodePostprocessor
+
+from llama_index.postprocessor.cohere_rerank import CohereRerank
 
 import chromadb
 
@@ -106,11 +109,30 @@ class OutputParser(BaseOutputParser):
         return output
 
 
+class FilePathFilterPostprocessor(BaseNodePostprocessor):
+    ignore_file_paths = Field(default_factory=list)
+
+    @classmethod
+    def class_name(cls) -> str:
+        return "FilePathFilterPostprocessor"
+
+    def _postprocess_nodes(self, nodes, query_bundle=None):
+        new_nodes = []
+
+        for node in nodes:
+            if node.node.metadata["file_path"] \
+                    not in self.ignore_file_paths:
+                new_nodes.append(node)
+
+        return new_nodes
+
+
 async def index_query(index,
                       question,
                       extra_instructions,
                       similarity_top_k,
-                      model):
+                      model,
+                      exclude_files_str):
     if not question:
         return ""
 
@@ -204,6 +226,9 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     cohere_rerank = CohereRerank(model=cohere_model,
                                  top_n=similarity_top_k)
 
+    file_path_filter = FilePathFilterPostprocessor(
+        ignore_file_paths=exclude_files_str.split("\n"))
+
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
             similarity_top_k=similarity_top_k,
@@ -218,7 +243,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             text_qa_template=text_qa_template,
             refine_template=refine_template,
             tokenizer=Anthropic().tokenizer,
-            node_postprocessors=[cohere_rerank])
+            node_postprocessors=[file_path_filter,
+                                 cohere_rerank])
 
         token_counter = TokenCountingHandler(
             tokenizer=Anthropic().tokenizer.encode)
@@ -237,7 +263,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 embed_batch_size=256),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
-            node_postprocessors=[cohere_rerank])
+            node_postprocessors=[file_path_filter,
+                                 cohere_rerank])
 
         token_counter = TokenCountingHandler(
             tokenizer=tiktoken.encoding_for_model(model).encode)
@@ -254,18 +281,24 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     response = response_obj.response
 
-    mentioned_docs = set()
+    mentioned_files = set()
 
     for node in response_obj.source_nodes:
         if node.node.metadata["file_name"] in response:
-            mentioned_docs.add(node.node.metadata["file_path"])
+            mentioned_files.add(node.node.metadata["file_path"])
 
-    mentioned_docs = [[x] for x in mentioned_docs]
-    mentioned_docs.sort()
+    mentioned_files_table = [[x] for x in mentioned_files]
+    mentioned_files_table.sort()
+
+    mentioned_files_str = "\n".join(sorted(mentioned_files))
 
     real_cost = calculate_cost(model, token_counter)
 
-    return response, mentioned_docs, real_cost, None
+    return (response,
+            mentioned_files_table,
+            mentioned_files_str,
+            real_cost,
+            None)
 
 
 ################################################################################
@@ -344,13 +377,28 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                         "claude-3-5-sonnet-20240620"],
                 value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
+        with gr.Tab("Filter"):
+            in_filter_file_paths = gr.TextArea(
+                label="Exclude file paths")
+
+            out_file_paths = gr.TextArea(
+                label="Exclude file paths")
+
         async def fn(*args):
             return await index_query(index, *args)
 
         btn_submit.click(
             fn=fn,
-            inputs=[in_question, in_instructions, in_top_k, in_model],
-            outputs=[out_response, out_docs, out_cost, out_file])
+            inputs=[in_question,
+                    in_instructions,
+                    in_top_k,
+                    in_model,
+                    in_filter_file_paths],
+            outputs=[out_response,
+                     out_docs,
+                     out_file_paths,
+                     out_cost,
+                     out_file])
 
         def out_docs_select_callback(evt: gr.SelectData):
             return str(DATABASE_PATH / evt.value.replace("\\", "/"))
