@@ -4,6 +4,8 @@ import sys
 import os
 from pathlib import Path
 
+from typing import List
+
 from dotenv import load_dotenv
 
 from llama_index.core import Settings
@@ -110,7 +112,7 @@ class OutputParser(BaseOutputParser):
 
 
 class FilePathFilterPostprocessor(BaseNodePostprocessor):
-    ignore_file_paths = Field(default_factory=list)
+    ignore_file_paths: List[str] = Field(default_factory=list)
 
     @classmethod
     def class_name(cls) -> str:
@@ -378,11 +380,11 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                 value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
         with gr.Tab("Filter"):
-            in_filter_file_paths = gr.TextArea(
-                label="Exclude file paths")
-
             out_file_paths = gr.TextArea(
-                label="Exclude file paths")
+                label="Found files")
+
+            in_filter_file_paths = gr.TextArea(
+                label="Exclude files (next query)")
 
         async def fn(*args):
             return await index_query(index, *args)
