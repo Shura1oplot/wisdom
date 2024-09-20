@@ -386,11 +386,17 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
             in_filter_file_paths = gr.TextArea(
                 label="Exclude files (next query)")
 
-        async def fn(*args):
+            with gr.Row():
+                btn_filter_copy = gr.Button("Copy")
+                btn_filter_clear = gr.Button("Clear")
+
+        ########################################################################
+
+        async def fn_submit(*args):
             return await index_query(index, *args)
 
         btn_submit.click(
-            fn=fn,
+            fn=fn_submit,
             inputs=[in_question,
                     in_instructions,
                     in_top_k,
@@ -402,12 +408,35 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                      out_cost,
                      out_file])
 
-        def out_docs_select_callback(evt: gr.SelectData):
+        def fn_out_docs_select_callback(evt: gr.SelectData):
             return str(DATABASE_PATH / evt.value.replace("\\", "/"))
 
         out_docs.select(
-            fn=out_docs_select_callback,
+            fn=fn_out_docs_select_callback,
             outputs=[out_file])
+
+        def fn_filter_copy(in_filter_file_paths, out_file_paths):
+            lst = in_filter_file_paths.split("\n")
+            lst.extend(out_file_paths.split("\n"))
+            lst = [x.strip() for x in lst]
+            lst = [x for x in lst if x]
+            lst = list(set(lst))
+            lst.sort()
+            return "\n".join(lst)
+
+        btn_filter_copy.click(
+            fn=fn_filter_copy,
+            inputs=[in_filter_file_paths,
+                    out_file_paths],
+            outputs=[in_filter_file_paths])
+
+        def fn_filter_clear():
+            return ""
+
+        btn_filter_clear.click(
+            fn=fn_filter_clear,
+            inputs=[],
+            outputs=[in_filter_file_paths])
 
     ############################################################################
 
