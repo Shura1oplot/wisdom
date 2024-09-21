@@ -31,14 +31,15 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
+MODEL_EMBEDDING = os.environ["MODEL_EMBEDDING"]
 
 
 def main(argv=sys.argv):
     Settings.embed_model = OpenAIEmbedding(
-        model="text-embedding-3-large",
+        model=MODEL_EMBEDDING,
         embed_batch_size=256)
     Settings.llm=OpenAI(
-        model="gpt-4o-mini",
+        model="gpt-4o-mini-2024-07-18",
         temperature=0,
         max_tokens=4096)
 

@@ -34,7 +34,7 @@ Provide the sources used to formulate the answer:
 </query>
 
 <extra_instructions>
-{extra_instructions}
+{instructions}
 </extra_instructions>
 
 ---------------------

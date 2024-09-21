@@ -53,6 +53,12 @@ DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
 
 COST_THRESHOLD = float(os.environ["COST_THRESHOLD"])
 
+MODEL_EMBEDDING = os.environ["MODEL_EMBEDDING"]
+LLM_ENHANCE_QUERY = os.environ["LLM_ENHANCE_QUERY"]
+
+# https://cohere.com/pricing
+COHERE_COST = 2 / 1000
+
 
 ################################################################################
 
@@ -72,24 +78,27 @@ def calculate_cost(model, token_counter):
                "claude-3-haiku-20240307":    [0.250,  1.250],
                "claude-3-5-sonnet-20240620": [3.000, 15.000]}
 
-    pricing_embedding = 0.130  # text-embedding-3-large
+    pricing_embedding = {
+        "text-embedding-3-large": 0.130
+    }
 
-    # https://cohere.com/pricing
-    cohere_cost = 2 / 1000
-
-    return token_counter.total_embedding_token_count * pricing_embedding \
-        / 1_000_000 + \
+    return token_counter.total_embedding_token_count \
+        * pricing_embedding[MODEL_EMBEDDING] / 1_000_000 + \
         token_counter.prompt_llm_token_count * pricing[model][0] \
         / 1_000_000 + \
         token_counter.completion_llm_token_count * pricing[model][1] \
-        / 1_000_000 + \
-        cohere_cost
+        / 1_000_000
 
 
 class OutputParser(BaseOutputParser):
 
     def parse(self, output):
-        for tag in ("refined_answer", "уточненный_ответ", "answer", "ответ"):
+        for tag in ("refined_answer",
+                    "уточненный_ответ",
+                    "answer",
+                    "ответ",
+                    "enhanced_query",
+                    "улучшенный_запрос"):
             if f"<{tag}>" not in output:
                 continue
 
@@ -130,12 +139,15 @@ class FilePathFilterPostprocessor(BaseNodePostprocessor):
 
 
 async def index_query(index,
-                      question,
-                      extra_instructions,
+                      query,
+                      instructions,
+                      query_enhance,
                       similarity_top_k,
                       model,
                       exclude_files_str):
-    if not question:
+    ### Checks ###
+
+    if not query:
         return ""
 
     if similarity_top_k is None:
@@ -146,15 +158,19 @@ async def index_query(index,
     if not model:
         raise gr.Error("'Model' cannot be empty")
 
+    ### Parameters ###
+
     language = "en"
 
     abc_ru = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
     abc_ru = set(abc_ru) | set(abc_ru.upper())
 
-    for c in question:
+    for c in query:
         if c in abc_ru:
             language = "ru"
             break
+
+    ### Prepare templates ###
 
     text_qa_template = ChatPromptTemplate([
         ChatMessage(
@@ -166,7 +182,7 @@ async def index_query(index,
             content=load_prompt("text_qa", "user", language))])
 
     text_qa_template = text_qa_template.partial_format(
-        extra_instructions=extra_instructions)
+        instructions=instructions)
 
     refine_template = ChatPromptTemplate([
         ChatMessage(
@@ -177,7 +193,15 @@ async def index_query(index,
             content=load_prompt("refine", "user", language))])
 
     refine_template = refine_template.partial_format(
-        extra_instructions=extra_instructions)
+        instructions=instructions)
+
+    q_enhance_template = ChatPromptTemplate([
+        ChatMessage(role=MessageRole.SYSTEM,
+                    content=load_prompt("q_enhance", "system", language)),
+        ChatMessage(role=MessageRole.USER,
+                    content=load_prompt("q_enhance", "user", language))])
+
+    ### Estimate cost ###
 
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
@@ -207,18 +231,62 @@ async def index_query(index,
     else:
         raise ValueError(model)
 
-    await query_engine.aquery(question)
+    await query_engine.aquery(query)
 
-    estimated_cost = calculate_cost(model, token_counter)
+    estimated_cost_query = calculate_cost(model, token_counter)
 
-    gr.Info(f"Estimated cost is ${estimated_cost:.4f}")
+    if query_enhance:
+        llm = MockLLM(max_tokens=len(query) * 2)
 
-    if estimated_cost >= COST_THRESHOLD:
+        token_counter = TokenCountingHandler(
+            tokenizer=tiktoken.encoding_for_model("gpt-3.5-turbo").encode)
+        llm.callback_manager.add_handler(token_counter)
+
+        await llm.achat(q_enhance_template.format_messages(
+            query_str=query))
+
+        estimated_cost_q_enhance = calculate_cost(
+            LLM_ENHANCE_QUERY, token_counter)
+
+    else:
+        estimated_cost_q_enhance = 0
+
+    estimated_cost_total = estimated_cost_query + estimated_cost_q_enhance \
+        + COHERE_COST
+
+    gr.Info(f"Estimated cost is ${estimated_cost_total:.4f}")
+
+    if estimated_cost_total >= COST_THRESHOLD:
         raise gr.Error((f"""\
-Estimated cost of ${estimated_cost:.2f} is above the allowed \
+Estimated cost of ${estimated_cost_total:.2f} is above the allowed \
 threshold ${COST_THRESHOLD:.2f}. Try cheaper models (claude-3-haiku \
 or gpt-4o-mini) or decrease index similarity top_k parameter.\
 """))
+
+    ### Query enhance ###
+
+    q_enhance_cost = 0
+
+    if query_enhance:
+        llm = OpenAI(
+                model=LLM_ENHANCE_QUERY,
+                temperature=0,
+                max_tokens=4096,
+                output_parser=OutputParser())
+
+        token_counter = TokenCountingHandler(
+            tokenizer=tiktoken.encoding_for_model("gpt-3.5-turbo").encode)
+        llm.callback_manager.add_handler(token_counter)
+
+        q_enhance_messages = q_enhance_template.format_messages(query_str=query)
+
+        response_obj = llm.chat(q_enhance_messages)
+
+        query = str(response_obj.message.content)
+
+        q_enhance_cost = calculate_cost(LLM_ENHANCE_QUERY, token_counter)
+
+    ### Query ###
 
     if language == "en":
         cohere_model = "rerank-english-v3.0"
@@ -240,7 +308,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 max_tokens=4096,
                 output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
-                model="text-embedding-3-large",
+                model=MODEL_EMBEDDING,
                 embed_batch_size=256),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
@@ -261,7 +329,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 max_tokens=4096,
                 output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
-                model="text-embedding-3-large",
+                model=MODEL_EMBEDDING,
                 embed_batch_size=256),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
@@ -276,12 +344,16 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
         raise ValueError(model)
 
     try:
-        response_obj = await query_engine.aquery(question)
+        response_obj = await query_engine.aquery(query)
     except Exception as e:
-        real_cost = calculate_cost(model, token_counter)
-        return f"LlamaIndex Error:\n\n{e}", [], real_cost
+        response = f"LlamaIndex Error:\n\n{e}"
 
-    response = response_obj.response
+    else:
+        response = response_obj.response
+
+    query_cost = calculate_cost(model, token_counter) + COHERE_COST
+
+    ### Mentioned files ###
 
     mentioned_files = set()
 
@@ -294,12 +366,12 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     mentioned_files_str = "\n".join(sorted(mentioned_files))
 
-    real_cost = calculate_cost(model, token_counter)
+    ### End ###
 
     return (response,
             mentioned_files_table,
             mentioned_files_str,
-            real_cost,
+            q_enhance_cost + query_cost,
             None)
 
 
@@ -308,7 +380,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
 def main(argv=sys.argv):
     Settings.embed_model = OpenAIEmbedding(
-        model="text-embedding-3-large",
+        model=MODEL_EMBEDDING,
         embed_batch_size=256)
 
     chroma_db = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
@@ -326,10 +398,10 @@ def main(argv=sys.argv):
             with gr.Row():
                 with gr.Column():  # Request and response
                     out_response = gr.TextArea(
-                        label="LLM response")
+                        label="AI response")
 
-                    in_question = gr.Textbox(
-                        label="Question")
+                    in_query = gr.Textbox(
+                        label="User query")
 
                     in_instructions = gr.Textbox(
                         label="Additional instructions")
@@ -339,10 +411,10 @@ def main(argv=sys.argv):
                     gr.Examples(
                         examples=[
                             ["Find presentations about safety stock management.",
-                             "Provide at least 20 presentations."],
+                             "Provide at least 10 presentations."],
                             ["Найди материалы по стратегическим фреймворкам.",
                              "Приведи не менее 10 презентаций."]],
-                        inputs=[in_question, in_instructions],
+                        inputs=[in_query, in_instructions],
                     )
 
                 with gr.Column():  # Documents
@@ -379,15 +451,19 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                         "claude-3-5-sonnet-20240620"],
                 value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
+            in_q_enhance = gr.Checkbox(
+                label="Enhance query using LLM",
+                value=False)
+
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
-                label="Found files")
+                label="Found files (last query)")
 
             in_filter_file_paths = gr.TextArea(
                 label="Exclude files (next query)")
 
             with gr.Row():
-                btn_filter_copy = gr.Button("Copy")
+                btn_filter_copy = gr.Button("Copy to ignore")
                 btn_filter_clear = gr.Button("Clear")
 
         ########################################################################
@@ -397,8 +473,9 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
 
         btn_submit.click(
             fn=fn_submit,
-            inputs=[in_question,
+            inputs=[in_query,
                     in_instructions,
+                    in_q_enhance,
                     in_top_k,
                     in_model,
                     in_filter_file_paths],

@@ -36,7 +36,7 @@ Ensure that the sources used to formulate the answer are provided:
 </query>
 
 <extra_instructions>
-{extra_instructions}
+{instructions}
 </extra_instructions>
 
 ---------------------
