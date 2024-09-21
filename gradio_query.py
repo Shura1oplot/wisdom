@@ -452,8 +452,11 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                 value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
             in_q_enhance = gr.Checkbox(
-                label="Enhance query using LLM",
-                value=False)
+                label="Enhance the query",
+                info="""\
+Before querying, try to enhance the query using AI: add context, keywords, etc.\
+""",
+                value=True)
 
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
