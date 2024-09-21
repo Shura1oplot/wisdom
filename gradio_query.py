@@ -280,7 +280,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
         q_enhance_messages = q_enhance_template.format_messages(query_str=query)
 
-        response_obj = llm.chat(q_enhance_messages)
+        response_obj = await llm.achat(q_enhance_messages)
 
         query = str(response_obj.message.content)
 
