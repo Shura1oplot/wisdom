@@ -143,6 +143,7 @@ async def index_query(index,
                       instructions,
                       query_enhance,
                       similarity_top_k,
+                      reranker_top_k,
                       model,
                       exclude_files_str):
     ### Checks ###
@@ -154,6 +155,11 @@ async def index_query(index,
         raise gr.Error("'Index similarity top_k' should be greater than 0")
 
     similarity_top_k = int(similarity_top_k)
+
+    if reranker_top_k is None:
+        raise gr.Error("'Index similarity top_k' should be greater than 0")
+
+    reranker_top_k = int(reranker_top_k)
 
     if not model:
         raise gr.Error("'Model' cannot be empty")
@@ -205,7 +211,7 @@ async def index_query(index,
 
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=similarity_top_k,
+            similarity_top_k=reranker_top_k,
             llm=MockLLM(max_tokens=512),
             embed_model=MockEmbedding(embed_dim=3072),
             text_qa_template=text_qa_template,
@@ -218,7 +224,7 @@ async def index_query(index,
 
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=int(similarity_top_k),
+            similarity_top_k=reranker_top_k,
             llm=MockLLM(max_tokens=512),
             embed_model=MockEmbedding(embed_dim=3072),
             text_qa_template=text_qa_template,
@@ -294,7 +300,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
         cohere_model = "rerank-multilingual-v3.0"
 
     cohere_rerank = CohereRerank(model=cohere_model,
-                                 top_n=similarity_top_k)
+                                 top_n=reranker_top_k)
 
     file_path_filter = FilePathFilterPostprocessor(
         ignore_file_paths=exclude_files_str.split("\n"))
@@ -322,7 +328,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=similarity_top_k,
+            similarity_top_k=reranker_top_k,
             llm=OpenAI(
                 model=model,
                 temperature=0,
@@ -428,10 +434,20 @@ def main(argv=sys.argv):
                     out_file = gr.File(label="Download")
 
         with gr.Tab("Options"):
-            in_top_k = gr.Number(
+            in_similarity_top_k = gr.Number(
                 label="Index similarity top_k",
                 info="""\
 How many chunks of the documents should be retrieved from the index and passed \
+to the reranker? Fewer chunks mean a cheaper response with less variants.\
+""",
+                minimum=1,
+                maximum=1000,
+                value=100)
+
+            in_reranker_top_k = gr.Number(
+                label="Reranker top_k",
+                info="""\
+How many chunks of the documents should be kept after reranking and passed \
 to the LLM? Fewer chunks mean a cheaper response with less variants. Start \
 with 10 or 100 and then adjust to your needs.\
 """,
@@ -479,7 +495,8 @@ Before querying, try to enhance the query using AI: add context, keywords, etc.\
             inputs=[in_query,
                     in_instructions,
                     in_q_enhance,
-                    in_top_k,
+                    in_similarity_top_k,
+                    in_reranker_top_k,
                     in_model,
                     in_filter_file_paths],
             outputs=[out_response,
