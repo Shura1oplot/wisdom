@@ -61,7 +61,7 @@ COHERE_COST = 2 / 1000
 
 EMBED_MODEL_DIM = 3072
 
-MOCK_LLM_MAX_TOKENS = 100  # FIXME: calibrate
+MOCK_LLM_MAX_TOKENS = 50  # FIXME: calibrate
 
 
 ################################################################################
@@ -246,7 +246,7 @@ async def index_query(index,
     estimated_cost_query = calculate_cost(model, token_counter)
 
     if query_enhance:
-        llm = MockLLM(max_tokens=len(query) * 2)
+        llm = MockLLM(max_tokens=len(query) * 2 / 4)  # 1 token = ~4 chars
 
         token_counter = TokenCountingHandler(
             tokenizer=tiktoken.encoding_for_model("gpt-3.5-turbo").encode)
@@ -472,7 +472,7 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
                 value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
             in_q_enhance = gr.Checkbox(
-                label="Enhance the query",
+                label="Enhance query",
                 info="""\
 Before querying, try to enhance the query using AI: add context, keywords, etc. \
 Turn this options off for manually optimized queires.\
