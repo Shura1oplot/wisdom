@@ -59,6 +59,10 @@ LLM_ENHANCE_QUERY = os.environ["LLM_ENHANCE_QUERY"]
 # https://cohere.com/pricing
 COHERE_COST = 2 / 1000
 
+EMBED_MODEL_DIM = 3072
+
+MOCK_LLM_MAX_TOKENS = 100  # FIXME: calibrate
+
 
 ################################################################################
 
@@ -212,8 +216,8 @@ async def index_query(index,
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
             similarity_top_k=reranker_top_k,
-            llm=MockLLM(max_tokens=512),
-            embed_model=MockEmbedding(embed_dim=3072),
+            llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
+            embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
             tokenizer=Anthropic().tokenizer)
@@ -225,8 +229,8 @@ async def index_query(index,
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
             similarity_top_k=reranker_top_k,
-            llm=MockLLM(max_tokens=512),
-            embed_model=MockEmbedding(embed_dim=3072),
+            llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
+            embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
             refine_template=refine_template)
 
@@ -470,9 +474,10 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
             in_q_enhance = gr.Checkbox(
                 label="Enhance the query",
                 info="""\
-Before querying, try to enhance the query using AI: add context, keywords, etc.\
+Before querying, try to enhance the query using AI: add context, keywords, etc. \
+Turn this options off for manually optimized queires.\
 """,
-                value=True)
+                value=False)
 
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
