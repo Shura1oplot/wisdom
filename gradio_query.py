@@ -411,7 +411,7 @@ def main(argv=sys.argv):
                         label="AI response")
 
                     in_query = gr.Textbox(
-                        label="User query")
+                        label="User's query")
 
                     in_instructions = gr.Textbox(
                         label="Additional instructions")
