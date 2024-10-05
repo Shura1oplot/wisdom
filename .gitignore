@@ -162,7 +162,8 @@ cython_debug/
 #.idea/
 
 
+.DS_Store
+
 documents.pickle
 chroma_db
 users.txt
-
