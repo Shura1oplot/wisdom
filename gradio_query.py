@@ -2,6 +2,7 @@
 
 import sys
 import os
+import hashlib
 from pathlib import Path
 
 from typing import List
@@ -50,6 +51,8 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
+
+PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
 COST_THRESHOLD = float(os.environ["COST_THRESHOLD"])
 
@@ -385,6 +388,25 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             None)
 
 
+def auth(username, password):
+    users = {}
+
+    with open(BASE_DIR / "users.txt", "r", encoding="utf-8") as fp:
+        for line in fp:
+            uname, hash_ = line.split(":", 2)
+            users[uname] = hash_
+
+    if username not in users:
+        return False
+
+    hash1 = users[username]
+
+    hash2 = hashlib.sha512(
+        (password + PASSWORD_SALT).encode("utf-8")).hexdigest()
+
+    return hash1 == hash2
+
+
 ################################################################################
 
 
@@ -543,9 +565,9 @@ Turn this options off for manually optimized queires.\
     ############################################################################
 
     demo.queue(default_concurrency_limit=20)
+
     demo.launch(root_path="/wisdom",
-                auth=[(os.environ["GRADIO_AUTH_USER"],
-                       os.environ["GRADIO_AUTH_PASS"])])
+                auth=auth)
 
 
 if __name__ == "__main__":
