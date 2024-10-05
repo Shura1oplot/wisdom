@@ -17,13 +17,13 @@ PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
 
 def main(argv=sys.argv):
-    username = argv[0]
-    password = argv[1]
+    username = argv[1]
+    password = argv[2]
 
-    hash_ = hashlib.sha512(
+    hash_ = hashlib.sha256(
         (password + PASSWORD_SALT).encode("utf-8")).hexdigest()
 
-    with open(BASE_DIR / "users.txt", "w", encoding="utf-8") as fp:
+    with open(BASE_DIR / "users.txt", "a", encoding="utf-8") as fp:
         fp.write(f"{username}:{hash_}\n")
 
 

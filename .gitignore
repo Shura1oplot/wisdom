@@ -164,3 +164,5 @@ cython_debug/
 
 documents.pickle
 chroma_db
+users.txt
+

@@ -394,14 +394,14 @@ def auth(username, password):
     with open(BASE_DIR / "users.txt", "r", encoding="utf-8") as fp:
         for line in fp:
             uname, hash_ = line.split(":", 2)
-            users[uname] = hash_
+            users[uname] = hash_.rstrip()
 
     if username not in users:
         return False
 
     hash1 = users[username]
 
-    hash2 = hashlib.sha512(
+    hash2 = hashlib.sha256(
         (password + PASSWORD_SALT).encode("utf-8")).hexdigest()
 
     return hash1 == hash2
