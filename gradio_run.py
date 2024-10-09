@@ -127,6 +127,23 @@ class OutputParser(BaseOutputParser):
         return output
 
 
+class NonExistingFilesFilterPostprocessor(BaseNodePostprocessor):
+    @classmethod
+    def class_name(cls) -> str:
+        return "NonExistingFilesFilterPostprocessor"
+
+    def _postprocess_nodes(self, nodes, query_bundle=None):
+        new_nodes = []
+
+        for node in nodes:
+            path = DATABASE_PATH / node.node.metadata["file_path"]
+
+            if path.exists():
+                new_nodes.append(node)
+
+        return new_nodes
+
+
 class FilePathFilterPostprocessor(BaseNodePostprocessor):
     ignore_file_paths: List[str] = Field(default_factory=list)
 
@@ -309,6 +326,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     cohere_rerank = CohereRerank(model=cohere_model,
                                  top_n=reranker_top_k)
 
+    non_existing_files_filter = NonExistingFilesFilterPostprocessor()
+
     file_path_filter = FilePathFilterPostprocessor(
         ignore_file_paths=exclude_files_str.split("\n"))
 
@@ -326,7 +345,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             text_qa_template=text_qa_template,
             refine_template=refine_template,
             tokenizer=Anthropic().tokenizer,
-            node_postprocessors=[file_path_filter,
+            node_postprocessors=[non_existing_files_filter,
+                                 file_path_filter,
                                  cohere_rerank])
 
         token_counter = TokenCountingHandler(
@@ -346,7 +366,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 embed_batch_size=256),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
-            node_postprocessors=[file_path_filter,
+            node_postprocessors=[non_existing_files_filter,
+                                 file_path_filter,
                                  cohere_rerank])
 
         token_counter = TokenCountingHandler(
