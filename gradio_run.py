@@ -471,14 +471,14 @@ def main(argv=sys.argv):
 
                     out_file = gr.File(label="Download")
 
-                gr.Examples(
-                    examples=[
-                        ["Find presentations about safety stock management.",
-                         "Provide at least 10 presentations."],
-                        ["Найди материалы по стратегическим фреймворкам.",
-                         "Приведи не менее 10 презентаций."]],
-                    inputs=[in_query, in_instructions],
-                )
+            gr.Examples(
+                examples=[
+                    ["Find presentations about safety stock management.",
+                     "Provide at least 10 presentations."],
+                    ["Найди материалы по стратегическим фреймворкам.",
+                     "Приведи не менее 10 презентаций."]],
+                inputs=[in_query, in_instructions],
+            )
 
         with gr.Tab("Options"):
             in_similarity_top_k = gr.Number(
