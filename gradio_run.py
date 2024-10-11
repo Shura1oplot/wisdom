@@ -483,31 +483,18 @@ def main(argv=sys.argv):
         with gr.Tab("Options"):
             in_similarity_top_k = gr.Number(
                 label="Index similarity top_k",
-                info="""\
-How many chunks of the documents should be retrieved from the index and passed \
-to the reranker? Fewer chunks mean a cheaper response with less variants.\
-""",
                 minimum=1,
                 maximum=1000,
                 value=100)
 
             in_reranker_top_k = gr.Number(
                 label="Reranker top_k",
-                info="""\
-How many chunks of the documents should be kept after reranking and passed \
-to the LLM? Fewer chunks mean a cheaper response with less variants. Start \
-with 10 or 100 and then adjust to your needs.\
-""",
                 minimum=1,
                 maximum=1000,
                 value=100)
 
             in_model = gr.Dropdown(
                 label="Model",
-                info="""\
-Try different models. Start with claude-3-haiku. Pay attention to costs charged. \
-It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
-""",
                choices=["gpt-4o-mini-2024-07-18",
                         "gpt-4o-2024-08-06",
                         "claude-3-haiku-20240307",
@@ -516,10 +503,6 @@ It is recommended to use gpt-4o-mini or claude-3-haiku with top_k above 100.\
 
             in_q_enhance = gr.Checkbox(
                 label="Enhance query",
-                info="""\
-Before querying, try to enhance the query using AI: add context, keywords, etc. \
-Turn this options off for manually optimized queires.\
-""",
                 value=False)
 
         with gr.Tab("Filter"):
