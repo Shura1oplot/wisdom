@@ -167,7 +167,7 @@ async def index_query(index,
                       instructions,
                       query_enhance,
                       similarity_top_k,
-                      reranker_top_k,
+                      reranker_top_n,
                       model,
                       exclude_files_str):
     ### Checks ###
@@ -180,10 +180,10 @@ async def index_query(index,
 
     similarity_top_k = int(similarity_top_k)
 
-    if reranker_top_k is None:
+    if reranker_top_n is None:
         raise gr.Error("'Index similarity top_k' should be greater than 0")
 
-    reranker_top_k = int(reranker_top_k)
+    reranker_top_n = int(reranker_top_n)
 
     if not model:
         raise gr.Error("'Model' cannot be empty")
@@ -235,7 +235,7 @@ async def index_query(index,
 
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=reranker_top_k,
+            similarity_top_k=reranker_top_n,
             llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
             embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
@@ -248,7 +248,7 @@ async def index_query(index,
 
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=reranker_top_k,
+            similarity_top_k=reranker_top_n,
             llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
             embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
@@ -324,7 +324,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
         cohere_model = "rerank-multilingual-v3.0"
 
     cohere_rerank = CohereRerank(model=cohere_model,
-                                 top_n=reranker_top_k)
+                                 top_n=reranker_top_n)
 
     non_existing_files_filter = NonExistingFilesFilterPostprocessor()
 
@@ -355,7 +355,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=reranker_top_k,
+            similarity_top_k=reranker_top_n,
             llm=OpenAI(
                 model=model,
                 temperature=0,
@@ -461,15 +461,6 @@ def main(argv=sys.argv):
 
                     btn_submit = gr.Button("Submit")
 
-                    gr.Examples(
-                        examples=[
-                            ["Find presentations about safety stock management.",
-                             "Provide at least 10 presentations."],
-                            ["Найди материалы по стратегическим фреймворкам.",
-                             "Приведи не менее 10 презентаций."]],
-                        inputs=[in_query, in_instructions],
-                    )
-
                 with gr.Column():  # Documents
                     out_cost = gr.Number(label="Cost charged, USD")
 
@@ -480,6 +471,15 @@ def main(argv=sys.argv):
 
                     out_file = gr.File(label="Download")
 
+                gr.Examples(
+                    examples=[
+                        ["Find presentations about safety stock management.",
+                         "Provide at least 10 presentations."],
+                        ["Найди материалы по стратегическим фреймворкам.",
+                         "Приведи не менее 10 презентаций."]],
+                    inputs=[in_query, in_instructions],
+                )
+
         with gr.Tab("Options"):
             in_similarity_top_k = gr.Number(
                 label="Index similarity top_k",
@@ -487,18 +487,18 @@ def main(argv=sys.argv):
                 maximum=1000,
                 value=100)
 
-            in_reranker_top_k = gr.Number(
-                label="Reranker top_k",
+            in_reranker_top_n = gr.Number(
+                label="Index reranker top_n",
                 minimum=1,
                 maximum=1000,
                 value=100)
 
             in_model = gr.Dropdown(
                 label="Model",
-               choices=["gpt-4o-mini-2024-07-18",
-                        "gpt-4o-2024-08-06",
-                        "claude-3-haiku-20240307",
-                        "claude-3-5-sonnet-20240620"],
+                choices=["gpt-4o-mini-2024-07-18",
+                         "gpt-4o-2024-08-06",
+                         "claude-3-haiku-20240307",
+                         "claude-3-5-sonnet-20240620"],
                 value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
 
             in_q_enhance = gr.Checkbox(
@@ -527,7 +527,7 @@ def main(argv=sys.argv):
                     in_instructions,
                     in_q_enhance,
                     in_similarity_top_k,
-                    in_reranker_top_k,
+                    in_reranker_top_n,
                     in_model,
                     in_filter_file_paths],
             outputs=[out_response,
