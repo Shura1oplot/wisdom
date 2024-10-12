@@ -57,7 +57,11 @@ PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 COST_THRESHOLD = float(os.environ["COST_THRESHOLD"])
 
 MODEL_EMBEDDING = os.environ["MODEL_EMBEDDING"]
+DEFAULT_LLM = os.environ["DEFAULT_LLM"]
 LLM_ENHANCE_QUERY = os.environ["LLM_ENHANCE_QUERY"]
+
+DEFAULT_SIM_TOP_K = int(os.environ["DEFAULT_SIM_TOP_K"])
+DEFAULT_RERANK_TOP_N = int(os.environ["DEFAULT_RERANK_TOP_N"])
 
 # https://cohere.com/pricing
 COHERE_COST = 2 / 1000
@@ -300,8 +304,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     if query_enhance:
         llm = OpenAI(
                 model=LLM_ENHANCE_QUERY,
-                temperature=0,
-                max_tokens=4096,
+                temperature=0,  # FIXME: constant
+                max_tokens=4096,  # FIXME: constant
                 output_parser=OutputParser())
 
         token_counter = TokenCountingHandler(
@@ -336,12 +340,12 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             similarity_top_k=similarity_top_k,
             llm=Anthropic(
                 model=model,
-                temperature=0,
-                max_tokens=4096,
+                temperature=0,  # FIXME: constant
+                max_tokens=4096,  # FIXME: constant
                 output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
                 model=MODEL_EMBEDDING,
-                embed_batch_size=256),
+                embed_batch_size=256),  # FIXME: constant
             text_qa_template=text_qa_template,
             refine_template=refine_template,
             tokenizer=Anthropic().tokenizer,
@@ -358,12 +362,12 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             similarity_top_k=reranker_top_n,
             llm=OpenAI(
                 model=model,
-                temperature=0,
-                max_tokens=4096,
+                temperature=0,  # FIXME: constant
+                max_tokens=4096,  # FIXME: constant
                 output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
                 model=MODEL_EMBEDDING,
-                embed_batch_size=256),
+                embed_batch_size=256),  # FIXME: constant
             text_qa_template=text_qa_template,
             refine_template=refine_template,
             node_postprocessors=[non_existing_files_filter,
@@ -434,7 +438,7 @@ def auth(username, password):
 def main(argv=sys.argv):
     Settings.embed_model = OpenAIEmbedding(
         model=MODEL_EMBEDDING,
-        embed_batch_size=256)
+        embed_batch_size=256)  # FIXME: constant
 
     chroma_db = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
     chroma_collection = chroma_db.get_or_create_collection("wisdom")
@@ -485,13 +489,13 @@ def main(argv=sys.argv):
                 label="Index similarity top_k",
                 minimum=1,
                 maximum=1000,
-                value=100)
+                value=DEFAULT_SIM_TOP_K)
 
             in_reranker_top_n = gr.Number(
                 label="Index reranker top_n",
                 minimum=1,
                 maximum=1000,
-                value=100)
+                value=DEFAULT_RERANK_TOP_N)
 
             in_model = gr.Dropdown(
                 label="Model",
@@ -499,7 +503,7 @@ def main(argv=sys.argv):
                          "gpt-4o-2024-08-06",
                          "claude-3-haiku-20240307",
                          "claude-3-5-sonnet-20240620"],
-                value=os.environ.get("DEFAULT_LLM", "gpt-4o-mini-2024-07-18"))
+                value=DEFAULT_LLM)
 
             in_q_enhance = gr.Checkbox(
                 label="Enhance query",
@@ -568,7 +572,7 @@ def main(argv=sys.argv):
 
     ############################################################################
 
-    demo.queue(default_concurrency_limit=20)
+    demo.queue(default_concurrency_limit=20)  # FIXME: constant
 
     demo.launch(root_path=os.environ.get("GRADIO_ROOT_PATH", "/wisdom"),
                 auth=auth)
