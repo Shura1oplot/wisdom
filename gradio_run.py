@@ -570,9 +570,10 @@ def main(argv=sys.argv):
 
     demo.queue(default_concurrency_limit=20)
 
-    demo.launch(root_path="/wisdom",
+    demo.launch(root_path=os.environ.get("GRADIO_ROOT_PATH", "/wisdom"),
                 auth=auth)
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
