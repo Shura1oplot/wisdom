@@ -164,6 +164,8 @@ cython_debug/
 
 .DS_Store
 
+documents/
 documents.pickle
-chroma_db
+chroma_db/
 users.txt
+
