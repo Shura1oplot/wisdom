@@ -18,6 +18,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 
 from llama_index.llms.openai import OpenAI
 from llama_index.llms.anthropic import Anthropic
+from llama_index.llms.cohere import Cohere
 
 from llama_index.core import MockEmbedding
 from llama_index.core.llms import MockLLM
@@ -37,6 +38,8 @@ import chromadb
 
 import tiktoken
 
+import cohere
+
 import gradio as gr
 
 
@@ -52,12 +55,15 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
 
+COHERE_API_KEY = os.environ["COHERE_API_KEY"]
+
 PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
 LLM_GPT_4 = "gpt-4o-2024-08-06"
 LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
 LLM_CLAUDE = "claude-3-5-sonnet-20240620"
 LLM_CLAUDE_HAIKU = "claude-3-haiku-20240307",
+LLM_COHERE = "command-r-plus-08-2024"
 RERANK_COHERE_ENGLISH = "rerank-english-v3.0"
 RERANK_COHERE_MULTILANG = "rerank-multilingual-v3.0"
 
@@ -96,7 +102,8 @@ DEFAULT_LLM_MODEL = PRESETS[DEFAULT_PRESET][2]
 MODEL_PRICE = {"gpt-4o-2024-08-06":          [2.500, 10.000],
                "gpt-4o-mini-2024-07-18":     [0.150,  0.600],
                "claude-3-haiku-20240307":    [0.250,  1.250],
-               "claude-3-5-sonnet-20240620": [3.000, 15.000]}
+               "claude-3-5-sonnet-20240620": [3.000, 15.000],
+               "command-r-plus-08-2024":     [2.500, 10.000]}
 
 EMBEDDING_PRICE = {
     "text-embedding-3-large": 0.130
@@ -190,6 +197,15 @@ class FilePathFilterPostprocessor(BaseNodePostprocessor):
         return new_nodes
 
 
+class CohereTokenizer:
+    def __init__(self):
+        super().__init__()
+        self._co = cohere.ClientV2(api_key=COHERE_API_KEY)
+
+    def encode(self, text, *args, **kwargs):
+        return self(text, *args, **kwargs)
+
+
 async def index_query(index,
                       query,
                       instructions,
@@ -272,6 +288,19 @@ async def index_query(index,
 
         token_counter = TokenCountingHandler(
             tokenizer=Anthropic().tokenizer.encode)
+        query_engine.callback_manager.add_handler(token_counter)
+
+    elif model.startswith("command-"):
+        query_engine = index.as_query_engine(
+            similarity_top_k=rerank_top_n,
+            llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
+            embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
+            text_qa_template=text_qa_template,
+            refine_template=refine_template,
+            tokenizer=CohereTokenizer())
+
+        token_counter = TokenCountingHandler(
+            tokenizer=CohereTokenizer().encode)
         query_engine.callback_manager.add_handler(token_counter)
 
     elif model.startswith("gpt-"):
@@ -379,6 +408,28 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
         token_counter = TokenCountingHandler(
             tokenizer=Anthropic().tokenizer.encode)
+        query_engine.callback_manager.add_handler(token_counter)
+
+    elif model.startswith("command-"):
+        query_engine = index.as_query_engine(
+            similarity_top_k=similarity_top_k,
+            llm=Cohere(
+                model=model,
+                temperature=TEMPERATURE_DEFAULT,
+                max_tokens=MAX_TOKENS_DEFAULT,
+                output_parser=OutputParser()),
+            embed_model=OpenAIEmbedding(
+                model=MODEL_EMBEDDING,
+                embed_batch_size=EMBED_BATCH_SIZE),
+            text_qa_template=text_qa_template,
+            refine_template=refine_template,
+            tokenizer=CohereTokenizer(),
+            node_postprocessors=[non_existing_files_filter,
+                                 file_path_filter,
+                                 cohere_rerank])
+
+        token_counter = TokenCountingHandler(
+            tokenizer=CohereTokenizer.encode)
         query_engine.callback_manager.add_handler(token_counter)
 
     elif model.startswith("gpt-"):
@@ -540,7 +591,8 @@ def main(argv=sys.argv):
                 choices=[("GPT-4o-mini",  LLM_GPT_4_MINI),
                          ("GPT-4o",       LLM_GPT_4),
                          ("Claude Mini",  LLM_CLAUDE_HAIKU),
-                         ("Claude Large", LLM_CLAUDE)],
+                         ("Claude Large", LLM_CLAUDE),
+                         ("Command R+",   LLM_COHERE)],
                 value=DEFAULT_LLM_MODEL)
 
             in_q_enhance = gr.Checkbox(
