@@ -83,8 +83,7 @@ PRESETS = {
     "smart_response": (100, 30,  LLM_GPT_4)
 }
 
-DEFAULT_PRESET = os.environ.get(
-    "DEFAULT_PRESET", next(PRESETS.keys()))
+DEFAULT_PRESET = os.environ["DEFAULT_PRESET"]
 
 DEFAULT_SIM_TOP_K = PRESETS[DEFAULT_PRESET][0]
 DEFAULT_RERANK_TOP_N = PRESETS[DEFAULT_PRESET][1]
@@ -499,7 +498,7 @@ def main(argv=sys.argv):
                     in_preset = gr.Dropdown(
                         label="Preset",
                         choices=[("More documents", "more_docs"),
-                                 ("Smart response", "smart_response")],
+                                 ("Smarter response", "smart_response")],
                         value=DEFAULT_PRESET)
 
                     btn_submit = gr.Button("Submit")
@@ -538,10 +537,10 @@ def main(argv=sys.argv):
 
             in_model = gr.Dropdown(
                 label="Model",
-                choices=[LLM_GPT_4_MINI,
-                         LLM_GPT_4,
-                         LLM_CLAUDE_HAIKU,
-                         LLM_CLAUDE],
+                choices=[("GPT-4o-mini",  LLM_GPT_4_MINI),
+                         ("GPT-4o",       LLM_GPT_4),
+                         ("Claude Mini",  LLM_CLAUDE_HAIKU),
+                         ("Claude Large", LLM_CLAUDE)],
                 value=DEFAULT_LLM_MODEL)
 
             in_q_enhance = gr.Checkbox(
