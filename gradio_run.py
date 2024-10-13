@@ -54,21 +54,57 @@ DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
 
 PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
+LLM_GPT_4 = "gpt-4o-2024-08-06"
+LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
+LLM_CLAUDE = "claude-3-5-sonnet-20240620"
+LLM_CLAUDE_HAIKU = "claude-3-haiku-20240307",
+RERANK_COHERE_ENGLISH = "rerank-english-v3.0"
+RERANK_COHERE_MULTILANG = "rerank-multilingual-v3.0"
+
+MODEL_EMBEDDING = "text-embedding-3-large"
+EMBED_MODEL_DIM = 3072
+EMBED_BATCH_SIZE = 256
+
+LLM_ENHANCE_QUERY = LLM_GPT_4
+
+TEMPERATURE_DEFAULT = 0.0
+MAX_TOKENS_DEFAULT = 4096
+
 COST_THRESHOLD = float(os.environ["COST_THRESHOLD"])
 
-MODEL_EMBEDDING = os.environ["MODEL_EMBEDDING"]
-DEFAULT_LLM = os.environ["DEFAULT_LLM"]
-LLM_ENHANCE_QUERY = os.environ["LLM_ENHANCE_QUERY"]
+MOCK_LLM_MAX_TOKENS = 50  # FIXME: calibrate
 
-DEFAULT_SIM_TOP_K = int(os.environ["DEFAULT_SIM_TOP_K"])
-DEFAULT_RERANK_TOP_N = int(os.environ["DEFAULT_RERANK_TOP_N"])
+GRADIO_CONCURRENCY_LIMIT = 20
+
+### PRESETS ###
+
+PRESETS = {
+    "more_docs":      (100, 100, LLM_GPT_4_MINI),
+    "smart_response": (100, 30,  LLM_GPT_4)
+}
+
+DEFAULT_PRESET = os.environ.get(
+    "DEFAULT_PRESET", next(PRESETS.keys()))
+
+DEFAULT_SIM_TOP_K = PRESETS[DEFAULT_PRESET][0]
+DEFAULT_RERANK_TOP_N = PRESETS[DEFAULT_PRESET][1]
+DEFAULT_LLM_MODEL = PRESETS[DEFAULT_PRESET][2]
+
+### COST ###
+
+# https://openai.com/api/pricing/
+# https://www.anthropic.com/pricing#anthropic-api
+MODEL_PRICE = {"gpt-4o-2024-08-06":          [2.500, 10.000],
+               "gpt-4o-mini-2024-07-18":     [0.150,  0.600],
+               "claude-3-haiku-20240307":    [0.250,  1.250],
+               "claude-3-5-sonnet-20240620": [3.000, 15.000]}
+
+EMBEDDING_PRICE = {
+    "text-embedding-3-large": 0.130
+}
 
 # https://cohere.com/pricing
-COHERE_COST = 2 / 1000
-
-EMBED_MODEL_DIM = 3072
-
-MOCK_LLM_MAX_TOKENS = 50  # FIXME: calibrate
+COHERE_RERANK_PRICE = 2 / 1000
 
 
 ################################################################################
@@ -82,22 +118,11 @@ def load_prompt(type_, role, lang):
 
 
 def calculate_cost(model, token_counter):
-    # https://openai.com/api/pricing/
-    # https://www.anthropic.com/pricing#anthropic-api
-    pricing = {"gpt-4o-2024-08-06":          [2.500, 10.000],
-               "gpt-4o-mini-2024-07-18":     [0.150,  0.600],
-               "claude-3-haiku-20240307":    [0.250,  1.250],
-               "claude-3-5-sonnet-20240620": [3.000, 15.000]}
-
-    pricing_embedding = {
-        "text-embedding-3-large": 0.130
-    }
-
     return token_counter.total_embedding_token_count \
-        * pricing_embedding[MODEL_EMBEDDING] / 1_000_000 + \
-        token_counter.prompt_llm_token_count * pricing[model][0] \
+        * EMBEDDING_PRICE[MODEL_EMBEDDING] / 1_000_000 + \
+        token_counter.prompt_llm_token_count * MODEL_PRICE[model][0] \
         / 1_000_000 + \
-        token_counter.completion_llm_token_count * pricing[model][1] \
+        token_counter.completion_llm_token_count * MODEL_PRICE[model][1] \
         / 1_000_000
 
 
@@ -171,7 +196,7 @@ async def index_query(index,
                       instructions,
                       query_enhance,
                       similarity_top_k,
-                      reranker_top_n,
+                      rerank_top_n,
                       model,
                       exclude_files_str):
     ### Checks ###
@@ -184,10 +209,10 @@ async def index_query(index,
 
     similarity_top_k = int(similarity_top_k)
 
-    if reranker_top_n is None:
+    if rerank_top_n is None:
         raise gr.Error("'Index similarity top_k' should be greater than 0")
 
-    reranker_top_n = int(reranker_top_n)
+    rerank_top_n = int(rerank_top_n)
 
     if not model:
         raise gr.Error("'Model' cannot be empty")
@@ -239,7 +264,7 @@ async def index_query(index,
 
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=reranker_top_n,
+            similarity_top_k=rerank_top_n,
             llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
             embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
@@ -252,7 +277,7 @@ async def index_query(index,
 
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=reranker_top_n,
+            similarity_top_k=rerank_top_n,
             llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
             embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
@@ -286,7 +311,7 @@ async def index_query(index,
         estimated_cost_q_enhance = 0
 
     estimated_cost_total = estimated_cost_query + estimated_cost_q_enhance \
-        + COHERE_COST
+        + COHERE_RERANK_PRICE
 
     gr.Info(f"Estimated cost is ${estimated_cost_total:.4f}")
 
@@ -304,12 +329,12 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     if query_enhance:
         llm = OpenAI(
                 model=LLM_ENHANCE_QUERY,
-                temperature=0,  # FIXME: constant
-                max_tokens=4096,  # FIXME: constant
+                temperature=TEMPERATURE_DEFAULT,
+                max_tokens=MAX_TOKENS_DEFAULT,
                 output_parser=OutputParser())
 
         token_counter = TokenCountingHandler(
-            tokenizer=tiktoken.encoding_for_model("gpt-3.5-turbo").encode)
+            tokenizer=tiktoken.encoding_for_model(LLM_GPT_4).encode)
         llm.callback_manager.add_handler(token_counter)
 
         q_enhance_messages = q_enhance_template.format_messages(query_str=query)
@@ -323,12 +348,12 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     ### Query ###
 
     if language == "en":
-        cohere_model = "rerank-english-v3.0"
+        cohere_model = RERANK_COHERE_ENGLISH
     else:
-        cohere_model = "rerank-multilingual-v3.0"
+        cohere_model = RERANK_COHERE_MULTILANG
 
     cohere_rerank = CohereRerank(model=cohere_model,
-                                 top_n=reranker_top_n)
+                                 top_n=rerank_top_n)
 
     non_existing_files_filter = NonExistingFilesFilterPostprocessor()
 
@@ -340,12 +365,12 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             similarity_top_k=similarity_top_k,
             llm=Anthropic(
                 model=model,
-                temperature=0,  # FIXME: constant
-                max_tokens=4096,  # FIXME: constant
+                temperature=TEMPERATURE_DEFAULT,
+                max_tokens=MAX_TOKENS_DEFAULT,
                 output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
                 model=MODEL_EMBEDDING,
-                embed_batch_size=256),  # FIXME: constant
+                embed_batch_size=EMBED_BATCH_SIZE),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
             tokenizer=Anthropic().tokenizer,
@@ -359,15 +384,15 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=reranker_top_n,
+            similarity_top_k=rerank_top_n,
             llm=OpenAI(
                 model=model,
-                temperature=0,  # FIXME: constant
-                max_tokens=4096,  # FIXME: constant
+                temperature=TEMPERATURE_DEFAULT,
+                max_tokens=MAX_TOKENS_DEFAULT,
                 output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
                 model=MODEL_EMBEDDING,
-                embed_batch_size=256),  # FIXME: constant
+                embed_batch_size=EMBED_BATCH_SIZE),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
             node_postprocessors=[non_existing_files_filter,
@@ -389,7 +414,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     else:
         response = response_obj.response
 
-    query_cost = calculate_cost(model, token_counter) + COHERE_COST
+    query_cost = calculate_cost(model, token_counter) \
+        + COHERE_RERANK_PRICE
 
     ### Mentioned files ###
 
@@ -411,6 +437,13 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             mentioned_files_str,
             q_enhance_cost + query_cost,
             None)
+
+
+def apply_preset(preset):
+    try:
+        return PRESETS[preset]
+    except KeyError:
+        raise gr.Error(f"Unknown preset: {preset}")
 
 
 def auth(username, password):
@@ -438,7 +471,7 @@ def auth(username, password):
 def main(argv=sys.argv):
     Settings.embed_model = OpenAIEmbedding(
         model=MODEL_EMBEDDING,
-        embed_batch_size=256)  # FIXME: constant
+        embed_batch_size=EMBED_BATCH_SIZE)
 
     chroma_db = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
     chroma_collection = chroma_db.get_or_create_collection("wisdom")
@@ -462,6 +495,12 @@ def main(argv=sys.argv):
 
                     in_instructions = gr.Textbox(
                         label="Additional instructions")
+
+                    in_preset = gr.Dropdown(
+                        label="Preset",
+                        choices=[("More documents", "more_docs"),
+                                 ("Smart response", "smart_response")],
+                        value=DEFAULT_PRESET)
 
                     btn_submit = gr.Button("Submit")
 
@@ -491,22 +530,22 @@ def main(argv=sys.argv):
                 maximum=1000,
                 value=DEFAULT_SIM_TOP_K)
 
-            in_reranker_top_n = gr.Number(
-                label="Index reranker top_n",
+            in_rerank_top_n = gr.Number(
+                label="Index rerank top_n",
                 minimum=1,
                 maximum=1000,
                 value=DEFAULT_RERANK_TOP_N)
 
             in_model = gr.Dropdown(
                 label="Model",
-                choices=["gpt-4o-mini-2024-07-18",
-                         "gpt-4o-2024-08-06",
-                         "claude-3-haiku-20240307",
-                         "claude-3-5-sonnet-20240620"],
-                value=DEFAULT_LLM)
+                choices=[LLM_GPT_4_MINI,
+                         LLM_GPT_4,
+                         LLM_CLAUDE_HAIKU,
+                         LLM_CLAUDE],
+                value=DEFAULT_LLM_MODEL)
 
             in_q_enhance = gr.Checkbox(
-                label="Enhance query",
+                label="Automatically optimize query",
                 value=False)
 
         with gr.Tab("Filter"):
@@ -531,7 +570,7 @@ def main(argv=sys.argv):
                     in_instructions,
                     in_q_enhance,
                     in_similarity_top_k,
-                    in_reranker_top_n,
+                    in_rerank_top_n,
                     in_model,
                     in_filter_file_paths],
             outputs=[out_response,
@@ -570,9 +609,16 @@ def main(argv=sys.argv):
             inputs=[],
             outputs=[in_filter_file_paths])
 
+        in_preset.change(
+            fn=apply_preset,
+            inputs=[in_preset],
+            outputs=[in_similarity_top_k,
+                     in_rerank_top_n,
+                     in_model])
+
     ############################################################################
 
-    demo.queue(default_concurrency_limit=20)  # FIXME: constant
+    demo.queue(default_concurrency_limit=GRADIO_CONCURRENCY_LIMIT)
 
     demo.launch(root_path=os.environ.get("GRADIO_ROOT_PATH", "/wisdom"),
                 auth=auth)
