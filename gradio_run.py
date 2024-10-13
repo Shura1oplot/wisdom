@@ -19,6 +19,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.llms.anthropic import Anthropic
 from llama_index.llms.cohere import Cohere
+import llama_index.llms.cohere.utils as cohere_utils
 
 from llama_index.core import MockEmbedding
 from llama_index.core.llms import MockLLM
@@ -63,7 +64,8 @@ LLM_GPT_4 = "gpt-4o-2024-08-06"
 LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
 LLM_CLAUDE = "claude-3-5-sonnet-20240620"
 LLM_CLAUDE_HAIKU = "claude-3-haiku-20240307",
-LLM_COHERE = "command-r-plus-08-2024"
+LLM_COHERE_COMMAND_R_PLUS = "command-r-plus-08-2024"
+LLM_COHERE_COMMAND_R = "command-r-08-2024"
 RERANK_COHERE_ENGLISH = "rerank-english-v3.0"
 RERANK_COHERE_MULTILANG = "rerank-multilingual-v3.0"
 
@@ -103,14 +105,30 @@ MODEL_PRICE = {"gpt-4o-2024-08-06":          [2.500, 10.000],
                "gpt-4o-mini-2024-07-18":     [0.150,  0.600],
                "claude-3-haiku-20240307":    [0.250,  1.250],
                "claude-3-5-sonnet-20240620": [3.000, 15.000],
-               "command-r-plus-08-2024":     [2.500, 10.000]}
+               "command-r-plus-08-2024":     [2.500, 10.000],
+               "command-r-08-2024":          [0.150,  0.600]}
 
 EMBEDDING_PRICE = {
-    "text-embedding-3-large": 0.130
+    "text-embedding-3-large":  0.130,  # OpenAI
+    "embed-multilingual-v3.0": 0.100,  # Cohere
 }
 
 # https://cohere.com/pricing
 COHERE_RERANK_PRICE = 2 / 1000
+
+
+################################################################################
+
+
+def _path_cohere_utils():
+    for model in (LLM_COHERE_COMMAND_R_PLUS, LLM_COHERE_COMMAND_R):
+        cohere_utils.COMMAND_MODELS[model] = 128000
+        cohere_utils.ALL_AVAILABLE_MODELS[model] = 128000
+        cohere_utils.CHAT_MODELS[model] = 128000
+        cohere_utils.FUNCTION_CALLING_MODELS.add(model)
+
+
+_path_cohere_utils()
 
 
 ################################################################################
@@ -200,10 +218,12 @@ class FilePathFilterPostprocessor(BaseNodePostprocessor):
 class CohereTokenizer:
     def __init__(self):
         super().__init__()
+
         self._co = cohere.ClientV2(api_key=COHERE_API_KEY)
 
     def encode(self, text, *args, **kwargs):
-        return self(text, *args, **kwargs)
+        response = self._co.tokenize(*args, text=text, model="command-r-08-2024", **kwargs)
+        return response.tokens
 
 
 async def index_query(index,
@@ -429,7 +449,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                                  cohere_rerank])
 
         token_counter = TokenCountingHandler(
-            tokenizer=CohereTokenizer.encode)
+            tokenizer=CohereTokenizer().encode)
         query_engine.callback_manager.add_handler(token_counter)
 
     elif model.startswith("gpt-"):
@@ -458,11 +478,10 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     try:
         response_obj = await query_engine.aquery(query)
-    except Exception as e:
-        response = f"LlamaIndex Error:\n\n{e}"
-
-    else:
         response = response_obj.response
+    except Exception as e:
+        response_obj = None
+        response = f"LlamaIndex Error:\n\n{e}"
 
     query_cost = calculate_cost(model, token_counter) \
         + COHERE_RERANK_PRICE
@@ -471,9 +490,10 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     mentioned_files = set()
 
-    for node in response_obj.source_nodes:
-        if node.node.metadata["file_name"] in response:
-            mentioned_files.add(node.node.metadata["file_path"])
+    if response_obj is not None:
+        for node in response_obj.source_nodes:
+            if node.node.metadata["file_name"] in response:
+                mentioned_files.add(node.node.metadata["file_path"])
 
     mentioned_files_table = [[x] for x in mentioned_files]
     mentioned_files_table.sort()
@@ -592,11 +612,12 @@ def main(argv=sys.argv):
                          ("GPT-4o",       LLM_GPT_4),
                          ("Claude Mini",  LLM_CLAUDE_HAIKU),
                          ("Claude Large", LLM_CLAUDE),
-                         ("Command R+",   LLM_COHERE)],
+                         ("Command R+",   LLM_COHERE_COMMAND_R_PLUS),
+                         ("Command R",    LLM_COHERE_COMMAND_R)],
                 value=DEFAULT_LLM_MODEL)
 
             in_q_enhance = gr.Checkbox(
-                label="Automatically optimize query",
+                label="Optimize query using LLM",
                 value=False)
 
         with gr.Tab("Filter"):
