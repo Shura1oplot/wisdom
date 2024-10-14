@@ -692,7 +692,8 @@ def main(argv=sys.argv):
 
     demo.queue(default_concurrency_limit=GRADIO_CONCURRENCY_LIMIT)
 
-    demo.launch(root_path=os.environ.get("GRADIO_ROOT_PATH", "/wisdom"),
+    demo.launch(allowed_paths=[DATABASE_PATH],
+                root_path=os.environ.get("GRADIO_ROOT_PATH", "/wisdom"),
                 auth=auth)
 
 
