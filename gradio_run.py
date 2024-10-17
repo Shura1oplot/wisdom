@@ -62,6 +62,7 @@ PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
 LLM_GPT_4 = "gpt-4o-2024-08-06"
 LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
+LLM_O1 = "o1-preview-2024-09-12"
 LLM_CLAUDE = "claude-3-5-sonnet-20240620"
 LLM_CLAUDE_HAIKU = "claude-3-haiku-20240307",
 LLM_COHERE_COMMAND_R_PLUS = "command-r-plus-08-2024"
@@ -101,12 +102,13 @@ DEFAULT_LLM_MODEL = PRESETS[DEFAULT_PRESET][2]
 
 # https://openai.com/api/pricing/
 # https://www.anthropic.com/pricing#anthropic-api
-MODEL_PRICE = {"gpt-4o-2024-08-06":          [2.500, 10.000],
-               "gpt-4o-mini-2024-07-18":     [0.150,  0.600],
-               "claude-3-haiku-20240307":    [0.250,  1.250],
-               "claude-3-5-sonnet-20240620": [3.000, 15.000],
-               "command-r-plus-08-2024":     [2.500, 10.000],
-               "command-r-08-2024":          [0.150,  0.600]}
+MODEL_PRICE = {"gpt-4o-2024-08-06":          [ 2.500, 10.000],
+               "gpt-4o-mini-2024-07-18":     [ 0.150,  0.600],
+               "o1-preview-2024-09-12":      [15.000, 60.000],
+               "claude-3-haiku-20240307":    [ 0.250,  1.250],
+               "claude-3-5-sonnet-20240620": [ 3.000, 15.000],
+               "command-r-plus-08-2024":     [ 2.500, 10.000],
+               "command-r-08-2024":          [ 0.150,  0.600]}
 
 EMBEDDING_PRICE = {
     "text-embedding-3-large":  0.130,  # OpenAI
@@ -297,6 +299,7 @@ async def index_query(index,
 
     ### Estimate cost ###
 
+    # Anthropic
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
             similarity_top_k=rerank_top_n,
@@ -310,6 +313,7 @@ async def index_query(index,
             tokenizer=Anthropic().tokenizer.encode)
         query_engine.callback_manager.add_handler(token_counter)
 
+    # Cohere
     elif model.startswith("command-"):
         query_engine = index.as_query_engine(
             similarity_top_k=rerank_top_n,
@@ -323,7 +327,8 @@ async def index_query(index,
             tokenizer=CohereTokenizer().encode)
         query_engine.callback_manager.add_handler(token_counter)
 
-    elif model.startswith("gpt-"):
+    # OpenAI
+    elif model.startswith("gpt-") or model.startswith("o1-"):
         query_engine = index.as_query_engine(
             similarity_top_k=rerank_top_n,
             llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
@@ -408,6 +413,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     file_path_filter = FilePathFilterPostprocessor(
         ignore_file_paths=exclude_files_str.split("\n"))
 
+    # Anthropic
     if model.startswith("claude-"):
         query_engine = index.as_query_engine(
             similarity_top_k=similarity_top_k,
@@ -430,6 +436,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             tokenizer=Anthropic().tokenizer.encode)
         query_engine.callback_manager.add_handler(token_counter)
 
+    # Cohere
     elif model.startswith("command-"):
         query_engine = index.as_query_engine(
             similarity_top_k=similarity_top_k,
@@ -452,7 +459,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             tokenizer=CohereTokenizer().encode)
         query_engine.callback_manager.add_handler(token_counter)
 
-    elif model.startswith("gpt-"):
+    # OpenAI
+    elif model.startswith("gpt-") or model.startswith("o1-"):
         query_engine = index.as_query_engine(
             similarity_top_k=rerank_top_n,
             llm=OpenAI(
@@ -610,6 +618,7 @@ def main(argv=sys.argv):
                 label="Model",
                 choices=[("GPT-4o-mini",  LLM_GPT_4_MINI),
                          ("GPT-4o",       LLM_GPT_4),
+                         ("O1",           LLM_O1),
                          ("Claude Mini",  LLM_CLAUDE_HAIKU),
                          ("Claude Large", LLM_CLAUDE),
                          ("Command R+",   LLM_COHERE_COMMAND_R_PLUS),
