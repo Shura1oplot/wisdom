@@ -81,7 +81,7 @@ MAX_TOKENS_DEFAULT = 4096
 
 COST_THRESHOLD = float(os.environ["COST_THRESHOLD"])
 
-MOCK_LLM_MAX_TOKENS = 50  # FIXME: calibrate
+MOCK_LLM_MAX_TOKENS = 50
 
 GRADIO_CONCURRENCY_LIMIT = 20
 
@@ -348,10 +348,10 @@ async def index_query(index,
     estimated_cost_query = calculate_cost(model, token_counter)
 
     if query_enhance:
-        llm = MockLLM(max_tokens=len(query) * 2 / 4)  # 1 token = ~4 chars
+        llm = MockLLM(max_tokens=len(query) / 4 * 2)
 
         token_counter = TokenCountingHandler(
-            tokenizer=tiktoken.encoding_for_model("gpt-3.5-turbo").encode)
+            tokenizer=tiktoken.encoding_for_model(LLM_GPT_4).encode)
         llm.callback_manager.add_handler(token_counter)
 
         await llm.achat(q_enhance_template.format_messages(
@@ -460,13 +460,34 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
         query_engine.callback_manager.add_handler(token_counter)
 
     # OpenAI
-    elif model.startswith("gpt-") or model.startswith("o1-"):
+    elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
-            similarity_top_k=rerank_top_n,
+            similarity_top_k=similarity_top_k,
             llm=OpenAI(
                 model=model,
                 temperature=TEMPERATURE_DEFAULT,
                 max_tokens=MAX_TOKENS_DEFAULT,
+                output_parser=OutputParser()),
+            embed_model=OpenAIEmbedding(
+                model=MODEL_EMBEDDING,
+                embed_batch_size=EMBED_BATCH_SIZE),
+            text_qa_template=text_qa_template,
+            refine_template=refine_template,
+            node_postprocessors=[non_existing_files_filter,
+                                 file_path_filter,
+                                 cohere_rerank])
+
+        token_counter = TokenCountingHandler(
+            tokenizer=tiktoken.encoding_for_model(model).encode)
+        query_engine.callback_manager.add_handler(token_counter)
+
+    elif model.startswith("o1-"):
+        query_engine = index.as_query_engine(
+            similarity_top_k=similarity_top_k,
+            llm=OpenAI(
+                model=model,
+                temperature=TEMPERATURE_DEFAULT,
+                # max_tokens=MAX_TOKENS_DEFAULT,
                 output_parser=OutputParser()),
             embed_model=OpenAIEmbedding(
                 model=MODEL_EMBEDDING,

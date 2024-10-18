@@ -31,17 +31,25 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
-MODEL_EMBEDDING = os.environ["MODEL_EMBEDDING"]
+
+LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
+
+MODEL_EMBEDDING = "text-embedding-3-large"
+EMBED_MODEL_DIM = 3072
+EMBED_BATCH_SIZE = 256
+
+TEMPERATURE_DEFAULT = 0.0
+MAX_TOKENS_DEFAULT = 4096
 
 
 def main(argv=sys.argv):
     Settings.embed_model = OpenAIEmbedding(
         model=MODEL_EMBEDDING,
-        embed_batch_size=256)
+        embed_batch_size=EMBED_BATCH_SIZE)
     Settings.llm=OpenAI(
-        model="gpt-4o-mini-2024-07-18",
-        temperature=0,
-        max_tokens=4096)
+        model=LLM_GPT_4_MINI,
+        temperature=TEMPERATURE_DEFAULT,
+        max_tokens=MAX_TOKENS_DEFAULT)
 
     print("Parsing files...")
 
@@ -106,10 +114,11 @@ def main(argv=sys.argv):
         new_documents = SimpleDirectoryReader(
             input_dir=str(DATABASE_PATH),
             recursive=True,
-            required_exts=[".pdf", ".ppt", ".pptx"],
-            file_extractor={".pdf": parser,
-                            ".ppt": parser,
-                            ".pptx": parser},
+            required_exts=[".pdf", ".ppt", ".pptx", ".txt"],
+            file_extractor={".pdf":  parser,
+                            ".ppt":  parser,
+                            ".pptx": parser,
+                            ".txt":  parser},
             exclude=files_to_exclude,
         ).load_data(show_progress=True)  # num_workers=4
     except ValueError as e:
