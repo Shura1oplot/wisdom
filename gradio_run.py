@@ -63,7 +63,7 @@ PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 LLM_GPT_4 = "gpt-4o-2024-08-06"
 LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
 LLM_O1 = "o1-preview-2024-09-12"
-LLM_CLAUDE = "claude-3-5-sonnet-20240620"
+LLM_CLAUDE = "claude-3-5-sonnet-20241022"
 LLM_CLAUDE_HAIKU = "claude-3-haiku-20240307",
 LLM_COHERE_COMMAND_R_PLUS = "command-r-plus-08-2024"
 LLM_COHERE_COMMAND_R = "command-r-08-2024"
@@ -107,6 +107,7 @@ MODEL_PRICE = {"gpt-4o-2024-08-06":          [ 2.500, 10.000],
                "o1-preview-2024-09-12":      [15.000, 60.000],
                "claude-3-haiku-20240307":    [ 0.250,  1.250],
                "claude-3-5-sonnet-20240620": [ 3.000, 15.000],
+               "claude-3-5-sonnet-20241022": [ 3.000, 15.000],
                "command-r-plus-08-2024":     [ 2.500, 10.000],
                "command-r-08-2024":          [ 0.150,  0.600]}
 
