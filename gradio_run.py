@@ -88,15 +88,14 @@ GRADIO_CONCURRENCY_LIMIT = 20
 ### PRESETS ###
 
 PRESETS = {
-    "more_docs":      (100, 100, LLM_GPT_4_MINI),
-    "smart_response": (100, 30,  LLM_GPT_4)
+    "more_docs":      (100, 100, LLM_GPT_4_MINI, False),
+    "smart_response": (100, 30,  LLM_GPT_4, True)
 }
 
 DEFAULT_PRESET = os.environ["DEFAULT_PRESET"]
 
-DEFAULT_SIM_TOP_K = PRESETS[DEFAULT_PRESET][0]
-DEFAULT_RERANK_TOP_N = PRESETS[DEFAULT_PRESET][1]
-DEFAULT_LLM_MODEL = PRESETS[DEFAULT_PRESET][2]
+DEFAULT_SIM_TOP_K, DEFAULT_RERANK_TOP_N, DEFAULT_LLM_MODEL, \
+    DEFAULT_ENHANCE_QUERY = PRESETS[DEFAULT_PRESET]
 
 ### COST ###
 
@@ -652,7 +651,7 @@ def main(argv=sys.argv):
 
             in_q_enhance = gr.Checkbox(
                 label="Optimize query using LLM",
-                value=False)
+                value=DEFAULT_ENHANCE_QUERY)
 
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
@@ -725,7 +724,8 @@ def main(argv=sys.argv):
             inputs=[in_preset],
             outputs=[in_similarity_top_k,
                      in_rerank_top_n,
-                     in_model])
+                     in_model,
+                     in_q_enhance])
 
     ############################################################################
 
