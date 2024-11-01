@@ -10,4 +10,3 @@ python -m venv .venv
 . ./.venv/bin/activate
 pip install -r requirements.txt
 systemctl start "$SYSTEMD_SERVICE"
-
