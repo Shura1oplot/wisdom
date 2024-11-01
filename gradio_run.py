@@ -349,7 +349,7 @@ async def index_query(index,
     estimated_cost_query = calculate_cost(model, token_counter)
 
     if query_enhance:
-        llm = MockLLM(max_tokens=len(query) / 4 * 2)
+        llm = MockLLM(max_tokens=int(len(query) / 4 * 2))
 
         token_counter = TokenCountingHandler(
             tokenizer=tiktoken.encoding_for_model(LLM_GPT_4).encode)
@@ -379,6 +379,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     ### Query enhance ###
 
     q_enhance_cost = 0
+    enhanced_query = None
 
     if query_enhance:
         llm = OpenAI(
@@ -395,7 +396,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
         response_obj = await llm.achat(q_enhance_messages)
 
-        query = str(response_obj.message.content)
+        enhanced_query = str(response_obj.message.content)
+        query = enhanced_query
 
         q_enhance_cost = calculate_cost(LLM_ENHANCE_QUERY, token_counter)
 
@@ -536,7 +538,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             mentioned_files_table,
             mentioned_files_str,
             q_enhance_cost + query_cost,
-            None)
+            None,
+            enhanced_query)
 
 
 def apply_preset(preset):
@@ -662,6 +665,10 @@ def main(argv=sys.argv):
                 btn_filter_copy = gr.Button("Copy to ignore")
                 btn_filter_clear = gr.Button("Clear")
 
+        with gr.Tab("Debug"):
+            out_debug_enhanced_prompt = gr.TextArea(
+                label="Enhanced prompt")
+
         ########################################################################
 
         async def fn_submit(*args):
@@ -680,7 +687,8 @@ def main(argv=sys.argv):
                      out_docs,
                      out_file_paths,
                      out_cost,
-                     out_file])
+                     out_file,
+                     out_debug_enhanced_prompt])
 
         def fn_out_docs_select_callback(evt: gr.SelectData):
             return str(DATABASE_PATH / evt.value.replace("\\", "/"))
