@@ -7,7 +7,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from nano_graphrag import GraphRAG, QueryParam
+from lightrag import LightRAG, QueryParam
+from lightrag.llm import gpt_4o_mini_complete, gpt_4o_complete
 
 from tqdm import tqdm
 
@@ -23,8 +24,9 @@ def main(argv=sys.argv):
     with open(BASE_DIR / "documents.pickle", "rb") as fp:
         documents = pickle.load(fp)
 
-    graphrag = GraphRAG(
-        working_dir=GRAPHRAG_WORKING_DIR)
+    graphrag = LightRAG(
+        working_dir=GRAPHRAG_WORKING_DIR,
+        llm_model_func=gpt_4o_mini_complete)
 
     for doc in tqdm(documents):
         graphrag.insert(doc.get_content())

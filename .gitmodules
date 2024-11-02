@@ -1,0 +1,3 @@
+[submodule "submodules/LightRAG"]
+	path = submodules/LightRAG
+	url = https://github.com/HKUDS/LightRAG

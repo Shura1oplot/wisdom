@@ -12,5 +12,5 @@ systemctl stop "$SYSTEMD_SERVICE"
 mv .venv .venv.bak
 python -m venv .venv
 . ./.venv/bin/activate
-pip install --no-cache-dir -r requirements.txt
+pip install --no-cache-dir -r requirements.txt -e submodules/LightRAG
 systemctl start "$SYSTEMD_SERVICE"
