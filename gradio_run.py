@@ -41,6 +41,9 @@ import tiktoken
 
 import cohere
 
+from lightrag import LightRAG, QueryParam
+from lightrag.llm import gpt_4o_complete
+
 import gradio as gr
 
 
@@ -55,6 +58,8 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
+
+GRAPHRAG_WORKING_DIR = Path(os.environ["GRAPHRAG_WORKING_DIR"])
 
 COHERE_API_KEY = os.environ["COHERE_API_KEY"]
 
@@ -235,7 +240,8 @@ async def index_query(index,
                       similarity_top_k,
                       rerank_top_n,
                       model,
-                      exclude_files_str):
+                      exclude_files_str,
+                      use_graphrag):
     ### Checks ###
 
     if not query:
@@ -502,15 +508,22 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     else:
         raise ValueError(model)
 
-    try:
-        response_obj = await query_engine.aquery(query)
-        response = response_obj.response
-    except Exception as e:
-        response_obj = None
-        response = f"LlamaIndex Error:\n\n{e}"
+    response_obj = await query_engine.aquery(query)
+    response = response_obj.response
 
     query_cost = calculate_cost(model, token_counter) \
         + COHERE_RERANK_PRICE
+
+    graphrag_response = None
+
+    if use_graphrag:  # FIXME: cost calculation
+        graphrag = LightRAG(
+            working_dir=GRAPHRAG_WORKING_DIR,
+            llm_model_func=gpt_4o_complete)
+        
+        graphrag_response = graphrag.query(query, param=QueryParam(mode="hybrid"))
+
+        # FIXME: integrade two responses
 
     ### Mentioned files ###
 
@@ -533,7 +546,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             mentioned_files_str,
             q_enhance_cost + query_cost,
             None,
-            enhanced_query)
+            enhanced_query,
+            graphrag_response)
 
 
 def apply_preset(preset):
@@ -663,6 +677,13 @@ def main(argv=sys.argv):
             out_debug_enhanced_prompt = gr.TextArea(
                 label="Enhanced prompt")
 
+            in_use_graphrag = gr.Checkbox(
+                label="Use GraphRAG",
+                value=False)
+            
+            out_debug_graphrag = gr.TextArea(
+                label="GraphRAG response")
+        
         ########################################################################
 
         async def fn_submit(*args):
@@ -676,13 +697,15 @@ def main(argv=sys.argv):
                     in_similarity_top_k,
                     in_rerank_top_n,
                     in_model,
-                    in_filter_file_paths],
+                    in_filter_file_paths,
+                    in_use_graphrag],
             outputs=[out_response,
                      out_docs,
                      out_file_paths,
                      out_cost,
                      out_file,
-                     out_debug_enhanced_prompt])
+                     out_debug_enhanced_prompt,
+                     out_debug_graphrag])
 
         def fn_out_docs_select_callback(evt: gr.SelectData):
             return str(DATABASE_PATH / evt.value.replace("\\", "/"))

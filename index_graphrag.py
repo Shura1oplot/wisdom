@@ -7,8 +7,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from lightrag import LightRAG, QueryParam
-from lightrag.llm import gpt_4o_mini_complete, gpt_4o_complete
+from lightrag import LightRAG
+from lightrag.llm import gpt_4o_mini_complete
 
 from tqdm import tqdm
 
