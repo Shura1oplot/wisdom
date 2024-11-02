@@ -10,4 +10,4 @@ chromadb
 gradio
 tqdm
 cohere
-lightrag-hku
+

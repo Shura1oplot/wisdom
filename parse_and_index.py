@@ -4,7 +4,6 @@ import sys
 import os
 import pickle
 from pathlib import Path
-from textwrap import dedent
 
 from dotenv import load_dotenv
 
@@ -31,6 +30,9 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
+
+PRIMARY_FORMAT = os.environ["PRIMARY_FORMAT"]
+FILE_EXTENSIONS = os.environ["FILE_EXTENSIONS"]
 
 LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
 
@@ -96,31 +98,50 @@ def main(argv=sys.argv):
 
     print("Files to exclude:", len(files_to_exclude))
 
-    parser = LlamaParse(
+    parser_ppt = LlamaParse(
         result_type="markdown",
         # language="ru",  # "en" or "ru""
-        parsing_instruction=dedent("""
-            You are parsing a slide of the presentation developed by a \
-            management consultant. DO extract all text from the slide. \
-            DO NOT skip or omit any text. Do you best to understand charts \
-            and diagrams and translate them to markdown tables.
-        """.strip()),
-        # page_separator="\n---\n",
+        parsing_instruction="""\
+You are parsing a slide of the presentation developed by a \
+management consultant. DO extract all text from the slide. \
+DO NOT skip or omit any text. Do you best to understand charts \
+and diagrams and translate them to markdown tables.\
+"""),
+        page_separator="\n\n------\n\n",
         # page_prefix="\n",
-        page_suffix="\n\nSlide: {pageNumber}",
+        page_suffix="\n\nSlide number: {pageNumber}",
         verbose=False)
+
+    parser_doc = LlamaParse(
+        result_type="markdown",
+        # language="ru",  # "en" or "ru""
+        # parsing_instruction="",
+        # page_separator="\n\n------\n\n",
+        # page_prefix="\n",
+        # page_suffix="\n\nPage: {pageNumber}",
+        verbose=False)
+
+    if PRIMARY_FORMAT == "ppt": 
+        parser_pdf = parser_ppt
+    else:
+        parser_pdf = parser_doc
+
+    file_exts = [f".{x}" for x in FILE_EXTENSIONS.split(",")]
 
     try:
         new_documents = SimpleDirectoryReader(
             input_dir=str(DATABASE_PATH),
             recursive=True,
-            required_exts=[".pdf", ".ppt", ".pptx", ".txt"],
-            file_extractor={".pdf":  parser,
-                            ".ppt":  parser,
-                            ".pptx": parser,
-                            ".txt":  parser},
+            required_exts=file_exts,
+            file_extractor={".pdf":  parser_pdf,
+                            ".ppt":  parser_ppt,
+                            ".pptx": parser_ppt,
+                            ".txt":  parser_doc,
+                            ".doc":  parser_doc,
+                            ".docx": parser_doc},
             exclude=files_to_exclude,
         ).load_data(show_progress=True)  # num_workers=4
+
     except ValueError as e:
         print(e)  # ValueError: No files found in ...
         new_documents = []

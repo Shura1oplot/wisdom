@@ -168,4 +168,5 @@ documents/
 documents.pickle
 chroma_db/
 users.txt
+graphrag/
 

@@ -354,8 +354,7 @@ async def index_query(index,
             tokenizer=tiktoken.encoding_for_model(LLM_GPT_4).encode)
         llm.callback_manager.add_handler(token_counter)
 
-        await llm.achat(q_enhance_template.format_messages(
-            query_str=query))
+        await llm.apredict(q_enhance_template, query_str=query)
 
         estimated_cost_q_enhance = calculate_cost(
             LLM_ENHANCE_QUERY, token_counter)
@@ -381,21 +380,17 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     enhanced_query = None
 
     if query_enhance:
-        llm = OpenAI(
-                model=LLM_ENHANCE_QUERY,
-                temperature=TEMPERATURE_DEFAULT,
-                max_tokens=MAX_TOKENS_DEFAULT,
-                output_parser=OutputParser())
+        llm = OpenAI(model=LLM_ENHANCE_QUERY,
+                     temperature=TEMPERATURE_DEFAULT,
+                     max_tokens=MAX_TOKENS_DEFAULT,
+                     output_parser=OutputParser())
 
         token_counter = TokenCountingHandler(
             tokenizer=tiktoken.encoding_for_model(LLM_GPT_4).encode)
         llm.callback_manager.add_handler(token_counter)
 
-        q_enhance_messages = q_enhance_template.format_messages(query_str=query)
-
-        response_obj = await llm.achat(q_enhance_messages)
-
-        enhanced_query = str(response_obj.message.content)
+        enhanced_query = await llm.apredict(
+            q_enhance_template, query_str=query)
         query = enhanced_query
 
         q_enhance_cost = calculate_cost(LLM_ENHANCE_QUERY, token_counter)
@@ -607,8 +602,6 @@ def main(argv=sys.argv):
                     btn_submit = gr.Button("Submit")
 
                 with gr.Column():  # Documents
-                    out_cost = gr.Number(label="Cost charged, USD")
-
                     out_docs = gr.Dataframe(
                         # label="Documents",
                         headers=["Path"],
@@ -665,6 +658,8 @@ def main(argv=sys.argv):
                 btn_filter_clear = gr.Button("Clear")
 
         with gr.Tab("Debug"):
+            out_cost = gr.Number(label="Cost charged, USD")
+            
             out_debug_enhanced_prompt = gr.TextArea(
                 label="Enhanced prompt")
 

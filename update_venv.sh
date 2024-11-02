@@ -4,9 +4,13 @@ set -e
 
 . ./.env
 
+if [ -e .venv.bak ]; then
+    rm -rf .venv.bak
+fi
+
 systemctl stop "$SYSTEMD_SERVICE"
-rm -rf .venv
+mv .venv .venv.bak
 python -m venv .venv
 . ./.venv/bin/activate
-pip install -r requirements.txt
+pip install --no-cache-dir -r requirements.txt
 systemctl start "$SYSTEMD_SERVICE"
