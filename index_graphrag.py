@@ -17,7 +17,6 @@ load_dotenv()
 
 
 BASE_DIR = Path(__file__).parent.absolute()
-GRAPHRAG_WORKING_DIR = Path(os.environ["GRAPHRAG_WORKING_DIR"])
 
 
 def main(argv=sys.argv):
@@ -25,7 +24,7 @@ def main(argv=sys.argv):
         documents = pickle.load(fp)
 
     graphrag = LightRAG(
-        working_dir=GRAPHRAG_WORKING_DIR,
+        working_dir=BASE_DIR / "graphrag",
         llm_model_func=gpt_4o_mini_complete)
 
     for doc in tqdm(documents):

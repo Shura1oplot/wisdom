@@ -42,7 +42,7 @@ import tiktoken
 import cohere
 
 from lightrag import LightRAG, QueryParam
-from lightrag.llm import gpt_4o_complete
+from lightrag.llm import gpt_4o_complete, gpt_4o_mini_complete
 
 import gradio as gr
 
@@ -58,8 +58,6 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
-
-GRAPHRAG_WORKING_DIR = Path(os.environ["GRAPHRAG_WORKING_DIR"])
 
 COHERE_API_KEY = os.environ["COHERE_API_KEY"]
 
@@ -90,8 +88,11 @@ MOCK_LLM_MAX_TOKENS = 50
 
 GRADIO_CONCURRENCY_LIMIT = 20
 
+GRADIO_ROOT_PATH = os.environ.get("GRADIO_ROOT_PATH", "/wisdom")
+
 ### PRESETS ###
 
+# FIXME: add GraphRAG params
 PRESETS = {
     "more_docs":      (100, 100, LLM_GPT_4_MINI, False),
     "smart_response": (100, 30,  LLM_GPT_4, True)
@@ -229,7 +230,8 @@ class CohereTokenizer:
         self._co = cohere.ClientV2(api_key=COHERE_API_KEY)
 
     def encode(self, text, *args, **kwargs):
-        response = self._co.tokenize(*args, text=text, model="command-r-08-2024", **kwargs)
+        response = self._co.tokenize(
+            *args, text=text, model="command-r-08-2024", **kwargs)
         return response.tokens
 
 
@@ -241,7 +243,9 @@ async def index_query(index,
                       rerank_top_n,
                       model,
                       exclude_files_str,
-                      use_graphrag):
+                      use_graphrag,
+                      graphrag_mode,
+                      graphrag_top_k):
     ### Checks ###
 
     if not query:
@@ -272,6 +276,47 @@ async def index_query(index,
             language = "ru"
             break
 
+    ### Call RAG ###
+
+    if use_graphrag:
+        if model not in (LLM_GPT_4, LLM_GPT_4_MINI):
+            raise gr.Error(f"Unsupported model for GraphRAG: {model}")
+
+        if query_enhance:
+            raise gr.Error("Enhance query is unsopported for GraphRAG")
+
+        if exclude_files_str:
+            raise gr.Error("Exclude files is unsopported for GraphRAG")
+
+        if instructions:
+            raise gr.Error("Additional instructions are unsopported for GraphRAG")
+
+        return await index_query_graphrag(query,
+                                          language,
+                                          model,
+                                          graphrag_mode,
+                                          graphrag_top_k)
+
+    return await index_query_naive(index,
+                                   query,
+                                   language,
+                                   instructions,
+                                   query_enhance,
+                                   similarity_top_k,
+                                   rerank_top_n,
+                                   model,
+                                   exclude_files_str)
+
+
+async def index_query_naive(index,
+                            query,
+                            language,
+                            instructions,
+                            query_enhance,
+                            similarity_top_k,
+                            rerank_top_n,
+                            model,
+                            exclude_files_str):
     ### Prepare templates ###
 
     text_qa_template = ChatPromptTemplate([
@@ -462,7 +507,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             tokenizer=CohereTokenizer().encode)
         query_engine.callback_manager.add_handler(token_counter)
 
-    # OpenAI
+    # OpenAI: gpt-4o
     elif model.startswith("gpt-"):
         query_engine = index.as_query_engine(
             similarity_top_k=similarity_top_k,
@@ -484,6 +529,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             tokenizer=tiktoken.encoding_for_model(model).encode)
         query_engine.callback_manager.add_handler(token_counter)
 
+    # OpenAI: o1
     elif model.startswith("o1-"):
         query_engine = index.as_query_engine(
             similarity_top_k=similarity_top_k,
@@ -514,17 +560,6 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     query_cost = calculate_cost(model, token_counter) \
         + COHERE_RERANK_PRICE
 
-    graphrag_response = None
-
-    if use_graphrag:  # FIXME: cost calculation
-        graphrag = LightRAG(
-            working_dir=GRAPHRAG_WORKING_DIR,
-            llm_model_func=gpt_4o_complete)
-        
-        graphrag_response = graphrag.query(query, param=QueryParam(mode="hybrid"))
-
-        # FIXME: integrade two responses
-
     ### Mentioned files ###
 
     mentioned_files = set()
@@ -546,8 +581,38 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
             mentioned_files_str,
             q_enhance_cost + query_cost,
             None,
-            enhanced_query,
-            graphrag_response)
+            enhanced_query)
+
+
+async def index_query_graphrag(query,
+                               language,
+                               model,
+                               mode,
+                               top_k):
+    # FIXME: cost calculation
+
+    llm_model_func = gpt_4o_complete
+
+    if model == LLM_GPT_4_MINI:
+        llm_model_func = gpt_4o_mini_complete
+
+    if language == "ru":
+        pass  # FIXME: patch lightrag prompth
+
+    graphrag = LightRAG(
+        working_dir=BASE_DIR / "graphrag",
+        llm_model_func=llm_model_func)
+
+    response = await graphrag.aquery(
+        query, param=QueryParam(mode=mode,
+                                top_k=top_k))
+
+    return (response,
+            None,
+            None,
+            None,
+            None,
+            None)
 
 
 def apply_preset(preset):
@@ -660,6 +725,24 @@ def main(argv=sys.argv):
                 label="Optimize query using LLM",
                 value=DEFAULT_ENHANCE_QUERY)
 
+            in_use_graphrag = gr.Checkbox(
+                label="Use GraphRAG",
+                value=False)
+
+            in_graphrag_mode = gr.Dropdown(
+                label="GraphRAG mode",
+                choices=[("Local", "local"),
+                         ("Global", "global"),
+                         ("Hybrid", "hybrid"),
+                         ("Naive", "naive")],
+                value="global")
+
+            in_graphrag_top_k = gr.Number(
+                label="GraphRAG top_k",
+                minimum=1,
+                maximum=1000,
+                value=60)
+
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
                 label="Found files (last query)")
@@ -674,15 +757,8 @@ def main(argv=sys.argv):
         with gr.Tab("Debug"):
             out_cost = gr.Number(label="Cost charged, USD")
             
-            out_debug_enhanced_prompt = gr.TextArea(
+            out_enhanced_prompt = gr.TextArea(
                 label="Enhanced prompt")
-
-            in_use_graphrag = gr.Checkbox(
-                label="Use GraphRAG",
-                value=False)
-            
-            out_debug_graphrag = gr.TextArea(
-                label="GraphRAG response")
         
         ########################################################################
 
@@ -698,14 +774,15 @@ def main(argv=sys.argv):
                     in_rerank_top_n,
                     in_model,
                     in_filter_file_paths,
-                    in_use_graphrag],
+                    in_use_graphrag,
+                    in_graphrag_mode,
+                    in_graphrag_top_k],
             outputs=[out_response,
                      out_docs,
                      out_file_paths,
                      out_cost,
                      out_file,
-                     out_debug_enhanced_prompt,
-                     out_debug_graphrag])
+                     out_enhanced_prompt])
 
         def fn_out_docs_select_callback(evt: gr.SelectData):
             return str(DATABASE_PATH / evt.value.replace("\\", "/"))
@@ -750,7 +827,7 @@ def main(argv=sys.argv):
     demo.queue(default_concurrency_limit=GRADIO_CONCURRENCY_LIMIT)
 
     demo.launch(allowed_paths=[DATABASE_PATH],
-                root_path=os.environ.get("GRADIO_ROOT_PATH", "/wisdom"),
+                root_path=GRADIO_ROOT_PATH,
                 auth=auth)
 
 
