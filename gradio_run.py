@@ -698,50 +698,52 @@ def main(argv=sys.argv):
             )
 
         with gr.Tab("Options"):
-            in_similarity_top_k = gr.Number(
-                label="Index similarity top_k",
-                minimum=1,
-                maximum=1000,
-                value=DEFAULT_SIM_TOP_K)
+            with gr.Group():
+                in_similarity_top_k = gr.Number(
+                    label="Index similarity top_k",
+                    minimum=1,
+                    maximum=1000,
+                    value=DEFAULT_SIM_TOP_K)
 
-            in_rerank_top_n = gr.Number(
-                label="Index rerank top_n",
-                minimum=1,
-                maximum=1000,
-                value=DEFAULT_RERANK_TOP_N)
+                in_rerank_top_n = gr.Number(
+                    label="Index rerank top_n",
+                    minimum=1,
+                    maximum=1000,
+                    value=DEFAULT_RERANK_TOP_N)
 
-            in_model = gr.Dropdown(
-                label="Model",
-                choices=[("GPT-4o-mini",  LLM_GPT_4_MINI),
-                         ("GPT-4o",       LLM_GPT_4),
-                         ("O1",           LLM_O1),
-                         ("Claude Mini",  LLM_CLAUDE_HAIKU),
-                         ("Claude Large", LLM_CLAUDE),
-                         ("Command R+",   LLM_COHERE_COMMAND_R_PLUS),
-                         ("Command R",    LLM_COHERE_COMMAND_R)],
-                value=DEFAULT_LLM_MODEL)
+                in_model = gr.Dropdown(
+                    label="Model",
+                    choices=[("GPT-4o-mini",  LLM_GPT_4_MINI),
+                             ("GPT-4o",       LLM_GPT_4),
+                             ("O1",           LLM_O1),
+                             ("Claude Mini",  LLM_CLAUDE_HAIKU),
+                             ("Claude Large", LLM_CLAUDE),
+                             ("Command R+",   LLM_COHERE_COMMAND_R_PLUS),
+                             ("Command R",    LLM_COHERE_COMMAND_R)],
+                    value=DEFAULT_LLM_MODEL)
 
-            in_q_enhance = gr.Checkbox(
-                label="Optimize query using LLM",
-                value=DEFAULT_ENHANCE_QUERY)
+                in_q_enhance = gr.Checkbox(
+                    label="Optimize query using LLM",
+                    value=DEFAULT_ENHANCE_QUERY)
 
-            in_use_graphrag = gr.Checkbox(
-                label="Use GraphRAG",
-                value=False)
+            with gr.Group():
+                in_use_graphrag = gr.Checkbox(
+                    label="Use GraphRAG",
+                    value=False)
 
-            in_graphrag_mode = gr.Dropdown(
-                label="GraphRAG mode",
-                choices=[("Local", "local"),
-                         ("Global", "global"),
-                         ("Hybrid", "hybrid"),
-                         ("Naive", "naive")],
-                value="global")
+                in_graphrag_mode = gr.Dropdown(
+                    label="GraphRAG mode",
+                    choices=[("Local", "local"),
+                             ("Global", "global"),
+                             ("Hybrid", "hybrid"),
+                             ("Naive", "naive")],
+                    value="global")
 
-            in_graphrag_top_k = gr.Number(
-                label="GraphRAG top_k",
-                minimum=1,
-                maximum=1000,
-                value=60)
+                in_graphrag_top_k = gr.Number(
+                    label="GraphRAG top_k",
+                    minimum=1,
+                    maximum=1000,
+                    value=60)
 
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
