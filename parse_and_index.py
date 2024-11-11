@@ -106,19 +106,19 @@ You are parsing a slide of the presentation developed by a \
 management consultant. DO extract all text from the slide. \
 DO NOT skip or omit any text. Do you best to understand charts \
 and diagrams and translate them to markdown tables.\
-"""),
-        page_separator="\n\n------\n\n",
+""",
+        page_separator="\n\n---\n\n",
         # page_prefix="\n",
-        page_suffix="\n\nSlide number: {pageNumber}",
+        page_suffix="\n\nSlide number: {pageNumber}\n",
         verbose=False)
 
     parser_doc = LlamaParse(
         result_type="markdown",
         # language="ru",  # "en" or "ru""
         # parsing_instruction="",
-        # page_separator="\n\n------\n\n",
+        # page_separator="\n\n---\n\n",
         # page_prefix="\n",
-        # page_suffix="\n\nPage: {pageNumber}",
+        # page_suffix="\n\nPage: {pageNumber}\n",
         verbose=False)
 
     if PRIMARY_FORMAT == "ppt": 
