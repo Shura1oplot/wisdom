@@ -466,7 +466,7 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     ignore_file_paths = []
     ignore_file_paths.extend(exclude_files_str.split("\n"))
 
-    if include_restricted:
+    if not include_restricted:
         with open(RESTRICTED_FILE_PATH, encoding="utf-8") as fp:
             ignore_file_paths.extend(fp.read().strip().split("\n"))
 
@@ -780,7 +780,7 @@ def main(argv=sys.argv):
                 label="Enhanced prompt")
         
             in_include_restricted = gr.Checkbox(
-                label="Option1",
+                label="Option 2",
                 value=False)
 
         ########################################################################
