@@ -90,6 +90,8 @@ GRADIO_CONCURRENCY_LIMIT = 20
 
 GRADIO_ROOT_PATH = os.environ.get("GRADIO_ROOT_PATH", "/wisdom")
 
+RESTRICTED_FILE_PATH = os.environ["RESTRICTED_FILE_PATH"]
+
 ### PRESETS ###
 
 # FIXME: add GraphRAG params
@@ -245,7 +247,8 @@ async def index_query(index,
                       exclude_files_str,
                       use_graphrag,
                       graphrag_mode,
-                      graphrag_top_k):
+                      graphrag_top_k,
+                      include_restricted):
     ### Checks ###
 
     if not query:
@@ -305,7 +308,8 @@ async def index_query(index,
                                    similarity_top_k,
                                    rerank_top_n,
                                    model,
-                                   exclude_files_str)
+                                   exclude_files_str,
+                                   include_restricted)
 
 
 async def index_query_naive(index,
@@ -316,7 +320,8 @@ async def index_query_naive(index,
                             similarity_top_k,
                             rerank_top_n,
                             model,
-                            exclude_files_str):
+                            exclude_files_str,
+                            include_restricted):
     ### Prepare templates ###
 
     text_qa_template = ChatPromptTemplate([
@@ -458,8 +463,20 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
 
     non_existing_files_filter = NonExistingFilesFilterPostprocessor()
 
+    ignore_file_paths = []
+    ignore_file_paths.extend(exclude_files_str.split("\n"))
+
+    if include_restricted:
+        with open(RESTRICTED_FILE_PATH, encoding="utf-8") as fp:
+            ignore_file_paths.extend(fp.read().strip().split("\n"))
+
+    ignore_file_paths = [x.strip() for x in ignore_file_paths]
+    ignore_file_paths = [x for x in ignore_file_paths
+                         if x and not x.startswith("#")]
+    ignore_file_paths = [x.replace("\\", "/") for x in ignore_file_paths]
+
     file_path_filter = FilePathFilterPostprocessor(
-        ignore_file_paths=exclude_files_str.split("\n"))
+        ignore_file_paths=ignore_file_paths)
 
     # Anthropic
     if model.startswith("claude-"):
@@ -762,6 +779,10 @@ def main(argv=sys.argv):
             out_enhanced_prompt = gr.TextArea(
                 label="Enhanced prompt")
         
+            in_include_restricted = gr.Checkbox(
+                label="Option1",
+                value=False)
+
         ########################################################################
 
         async def fn_submit(*args):
@@ -778,7 +799,8 @@ def main(argv=sys.argv):
                     in_filter_file_paths,
                     in_use_graphrag,
                     in_graphrag_mode,
-                    in_graphrag_top_k],
+                    in_graphrag_top_k,
+                    in_include_restricted],
             outputs=[out_response,
                      out_docs,
                      out_file_paths,
