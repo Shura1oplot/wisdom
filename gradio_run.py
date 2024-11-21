@@ -63,7 +63,7 @@ COHERE_API_KEY = os.environ["COHERE_API_KEY"]
 
 PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
-LLM_GPT_4 = "gpt-4o-2024-08-06"
+LLM_GPT_4 = "gpt-4o-2024-11-20"
 LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
 LLM_O1 = "o1-preview-2024-09-12"
 LLM_CLAUDE = "claude-3-5-sonnet-20241022"
@@ -110,6 +110,7 @@ DEFAULT_SIM_TOP_K, DEFAULT_RERANK_TOP_N, DEFAULT_LLM_MODEL, \
 # https://openai.com/api/pricing/
 # https://www.anthropic.com/pricing#anthropic-api
 MODEL_PRICE = {"gpt-4o-2024-08-06":          [ 2.500, 10.000],
+               "gpt-4o-2024-11-20":          [ 2.500, 10.000],
                "gpt-4o-mini-2024-07-18":     [ 0.150,  0.600],
                "o1-preview-2024-09-12":      [15.000, 60.000],
                "claude-3-haiku-20240307":    [ 0.250,  1.250],
