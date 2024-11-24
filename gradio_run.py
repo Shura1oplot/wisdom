@@ -65,9 +65,8 @@ PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
 LLM_GPT_4 = "gpt-4o-2024-11-20"
 LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
-LLM_O1 = "o1-preview-2024-09-12"
-LLM_CLAUDE = "claude-3-5-sonnet-20241022"
-LLM_CLAUDE_HAIKU = "claude-3-haiku-20240307",
+LLM_CLAUDE_SONNET = "claude-3-5-sonnet-20241022"
+LLM_CLAUDE_HAIKU = "claude-3-5-haiku-20241022",
 LLM_COHERE_COMMAND_R_PLUS = "command-r-plus-08-2024"
 LLM_COHERE_COMMAND_R = "command-r-08-2024"
 RERANK_COHERE_ENGLISH = "rerank-english-v3.0"
@@ -95,12 +94,23 @@ RESTRICTED_FILE_PATH = os.environ["RESTRICTED_FILE_PATH"]
 ### PRESETS ###
 
 # FIXME: add GraphRAG params
+PRESETS_MODELS_MINI = {
+    "openai": LLM_GPT_4_MINI,
+    "anthropic": LLM_CLAUDE_HAIKU,
+    "cohere": LLM_COHERE_COMMAND_R,
+}
+PRESETS_MODELS_LARGE = {
+    "openai": LLM_GPT_4,
+    "anthropic": LLM_CLAUDE_SONNET,
+    "cohere": LLM_COHERE_COMMAND_R_PLUS,
+}
 PRESETS = {
-    "more_docs":      (100, 100, LLM_GPT_4_MINI, False),
-    "smart_response": (100, 30,  LLM_GPT_4, True)
+    "more_docs":      (100, 100, PRESETS_MODELS_MINI,  False),
+    "smart_response": (100, 30,  PRESETS_MODELS_LARGE, True)
 }
 
 DEFAULT_PRESET = os.environ["DEFAULT_PRESET"]
+DEFAULT_PROVIDER = os.environ["DEFAULT_PROVIDER"]
 
 DEFAULT_SIM_TOP_K, DEFAULT_RERANK_TOP_N, DEFAULT_LLM_MODEL, \
     DEFAULT_ENHANCE_QUERY = PRESETS[DEFAULT_PRESET]
@@ -633,11 +643,19 @@ async def index_query_graphrag(query,
             None)
 
 
-def apply_preset(preset):
+def apply_preset(preset, provider):
     try:
-        return PRESETS[preset]
+        similarity_top_k, rerank_top_n, models, q_enhance \
+            = PRESETS[preset]
     except KeyError:
         raise gr.Error(f"Unknown preset: {preset}")
+
+    try:
+        model = models[provider]
+    except KeyError:
+        raise gr.Error(f"Unknown provider: {provider}")
+
+    return similarity_top_k, rerank_top_n, model, q_enhance
 
 
 def auth(username, password):
@@ -690,11 +708,19 @@ def main(argv=sys.argv):
                     in_instructions = gr.Textbox(
                         label="Additional instructions")
 
-                    in_preset = gr.Dropdown(
-                        label="Preset",
-                        choices=[("More documents", "more_docs"),
-                                 ("Smarter response", "smart_response")],
-                        value=DEFAULT_PRESET)
+                    with gr.Row():
+                        in_preset = gr.Dropdown(
+                            label="Preset",
+                            choices=[("More documents", "more_docs"),
+                                     ("Smarter response", "smart_response")],
+                            value=DEFAULT_PRESET)
+
+                        in_provider = gr.Dropdown(
+                            label="Provider",
+                            choices=[("OpenAI", "openai"),
+                                     ("Anthropic", "anthropic"),
+                                     ("Cohere", "cohere")],
+                            value=DEFAULT_PROVIDER)
 
                     btn_submit = gr.Button("Submit")
 
@@ -706,14 +732,22 @@ def main(argv=sys.argv):
 
                     out_file = gr.File(label="Download")
 
-            gr.Examples(
-                examples=[
-                    ["Find presentations about safety stock management.",
-                     "Provide at least 10 presentations."],
-                    ["Найди материалы по стратегическим фреймворкам.",
-                     "Приведи не менее 10 презентаций."]],
-                inputs=[in_query, in_instructions],
-            )
+            with gr.Accordion(open=False):
+                gr.Examples(
+                    examples=[
+                        ["Find presentations about safety stock management.",
+                         "Provide at least 10 presentations.",
+                         "more_docs",
+                         "cohere"],
+                        ["Найди материалы по стратегическим фреймворкам.",
+                         "Приведи не менее 10 презентаций.",
+                         "more_docs",
+                         "openai"],
+                        ["What KPIs do exist in logistics?",
+                         "",
+                         "smart_response",
+                         "cohere"]],
+                    inputs=[in_query, in_instructions, in_preset, in_provider])
 
         with gr.Tab("Options"):
             with gr.Group():
@@ -731,13 +765,12 @@ def main(argv=sys.argv):
 
                 in_model = gr.Dropdown(
                     label="Model",
-                    choices=[("GPT-4o-mini",  LLM_GPT_4_MINI),
-                             ("GPT-4o",       LLM_GPT_4),
-                             ("O1",           LLM_O1),
-                             ("Claude Mini",  LLM_CLAUDE_HAIKU),
-                             ("Claude Large", LLM_CLAUDE),
-                             ("Command R+",   LLM_COHERE_COMMAND_R_PLUS),
-                             ("Command R",    LLM_COHERE_COMMAND_R)],
+                    choices=[("GPT-4o-mini",   LLM_GPT_4_MINI),
+                             ("GPT-4o",        LLM_GPT_4),
+                             ("Claude Haiku",  LLM_CLAUDE_HAIKU),
+                             ("Claude Sonnet", LLM_CLAUDE_SONNET),
+                             ("Command R+",    LLM_COHERE_COMMAND_R_PLUS),
+                             ("Command R",     LLM_COHERE_COMMAND_R)],
                     value=DEFAULT_LLM_MODEL)
 
                 in_q_enhance = gr.Checkbox(
@@ -761,7 +794,7 @@ def main(argv=sys.argv):
                     label="GraphRAG top_k",
                     minimum=1,
                     maximum=1000,
-                    value=60)
+                    value=60)  # FIXME
 
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
@@ -841,7 +874,15 @@ def main(argv=sys.argv):
 
         in_preset.change(
             fn=apply_preset,
-            inputs=[in_preset],
+            inputs=[in_preset, in_provider],
+            outputs=[in_similarity_top_k,
+                     in_rerank_top_n,
+                     in_model,
+                     in_q_enhance])
+
+        in_provider.change(
+            fn=apply_preset,
+            inputs=[in_preset, in_provider],
             outputs=[in_similarity_top_k,
                      in_rerank_top_n,
                      in_model,
