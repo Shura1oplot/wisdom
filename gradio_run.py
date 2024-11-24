@@ -733,7 +733,7 @@ def main(argv=sys.argv):
 
                     out_file = gr.File(label="Download")
 
-            with gr.Accordion(open=False):
+            with gr.Accordion("Examples", open=False):
                 gr.Examples(
                     examples=[
                         ["Find presentations about safety stock management.",
