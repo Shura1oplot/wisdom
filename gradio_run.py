@@ -105,6 +105,7 @@ PRESETS_MODELS_LARGE = {
     "cohere": LLM_COHERE_COMMAND_R_PLUS,
 }
 PRESETS = {
+    "documents":      (100, 30,  PRESETS_MODELS_LARGE, False),
     "more_docs":      (100, 100, PRESETS_MODELS_MINI,  False),
     "smart_response": (100, 30,  PRESETS_MODELS_LARGE, True)
 }
@@ -120,11 +121,13 @@ DEFAULT_LLM_MODEL = DEFAULT_LLM_MODELS[DEFAULT_PROVIDER]
 
 # https://openai.com/api/pricing/
 # https://www.anthropic.com/pricing#anthropic-api
+# https://cohere.com/pricing
 MODEL_PRICE = {"gpt-4o-2024-08-06":          [ 2.500, 10.000],
                "gpt-4o-2024-11-20":          [ 2.500, 10.000],
                "gpt-4o-mini-2024-07-18":     [ 0.150,  0.600],
                "o1-preview-2024-09-12":      [15.000, 60.000],
                "claude-3-haiku-20240307":    [ 0.250,  1.250],
+               "claude-3-5-haiku-20241022":  [ 1.000,  5.000],
                "claude-3-5-sonnet-20240620": [ 3.000, 15.000],
                "claude-3-5-sonnet-20241022": [ 3.000, 15.000],
                "command-r-plus-08-2024":     [ 2.500, 10.000],
@@ -135,8 +138,7 @@ EMBEDDING_PRICE = {
     "embed-multilingual-v3.0": 0.100,  # Cohere
 }
 
-# https://cohere.com/pricing
-COHERE_RERANK_PRICE = 2 / 1000
+COHERE_RERANK_PRICE = 2.0 / 1000
 
 
 ################################################################################
@@ -707,13 +709,18 @@ def main(argv=sys.argv):
                         label="User's query")
 
                     in_instructions = gr.Textbox(
-                        label="Additional instructions")
+                        label="Additional instructions",
+                        value="Provide at least 10 presentations.")
 
                     with gr.Row():
                         in_preset = gr.Dropdown(
                             label="Preset",
-                            choices=[("More documents",   "more_docs"),
-                                     ("Smarter response", "smart_response")],
+                            choices=[("Documents (large LLM)",
+                                      "documents"),
+                                     ("Documents (small LLM)",
+                                      "more_docs"),
+                                     ("Smarter response",
+                                      "smart_response")],
                             value=DEFAULT_PRESET)
 
                         in_provider = gr.Dropdown(
@@ -738,7 +745,7 @@ def main(argv=sys.argv):
                     examples=[
                         ["Find presentations about safety stock management.",
                          "Provide at least 10 presentations.",
-                         "more_docs",
+                         "documents",
                          "cohere"],
                         ["Найди материалы по стратегическим фреймворкам.",
                          "Приведи не менее 10 презентаций.",
@@ -810,10 +817,10 @@ def main(argv=sys.argv):
 
         with gr.Tab("Debug"):
             out_cost = gr.Number(label="Cost charged, USD")
-            
+
             out_enhanced_prompt = gr.TextArea(
                 label="Enhanced prompt")
-        
+
             in_include_restricted = gr.Checkbox(
                 label="Option 2",
                 value=False)
