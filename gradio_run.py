@@ -112,8 +112,9 @@ PRESETS = {
 DEFAULT_PRESET = os.environ["DEFAULT_PRESET"]
 DEFAULT_PROVIDER = os.environ["DEFAULT_PROVIDER"]
 
-DEFAULT_SIM_TOP_K, DEFAULT_RERANK_TOP_N, DEFAULT_LLM_MODEL, \
+DEFAULT_SIM_TOP_K, DEFAULT_RERANK_TOP_N, DEFAULT_LLM_MODELS, \
     DEFAULT_ENHANCE_QUERY = PRESETS[DEFAULT_PRESET]
+DEFAULT_LLM_MODEL = DEFAULT_LLM_MODELS[DEFAULT_PROVIDER]
 
 ### COST ###
 
@@ -711,15 +712,15 @@ def main(argv=sys.argv):
                     with gr.Row():
                         in_preset = gr.Dropdown(
                             label="Preset",
-                            choices=[("More documents", "more_docs"),
+                            choices=[("More documents",   "more_docs"),
                                      ("Smarter response", "smart_response")],
                             value=DEFAULT_PRESET)
 
                         in_provider = gr.Dropdown(
                             label="Provider",
-                            choices=[("OpenAI", "openai"),
+                            choices=[("OpenAI",    "openai"),
                                      ("Anthropic", "anthropic"),
-                                     ("Cohere", "cohere")],
+                                     ("Cohere",    "cohere")],
                             value=DEFAULT_PROVIDER)
 
                     btn_submit = gr.Button("Submit")
@@ -784,10 +785,10 @@ def main(argv=sys.argv):
 
                 in_graphrag_mode = gr.Dropdown(
                     label="GraphRAG mode",
-                    choices=[("Local", "local"),
+                    choices=[("Local",  "local"),
                              ("Global", "global"),
                              ("Hybrid", "hybrid"),
-                             ("Naive", "naive")],
+                             ("Naive",  "naive")],
                     value="global")
 
                 in_graphrag_top_k = gr.Number(
