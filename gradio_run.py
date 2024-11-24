@@ -719,7 +719,7 @@ def main(argv=sys.argv):
                                       "documents"),
                                      ("Documents (small LLM)",
                                       "more_docs"),
-                                     ("Smarter response",
+                                     ("Smart response",
                                       "smart_response")],
                             value=DEFAULT_PRESET)
 
