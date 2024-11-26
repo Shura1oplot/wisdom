@@ -263,7 +263,7 @@ class AnthropicTokenizer:
     def encode(self, text, *args, **kwargs):
         response = self._client.beta.messages.count_tokens(
             messages=[{"role": "user", "content": text}],
-            model=LLM_CLAUDE_HAIKU)
+            model=LLM_CLAUDE_SONNET)
         return [0] * response.input_tokens  # FIXME: dirty hack
 
 
