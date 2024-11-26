@@ -39,6 +39,7 @@ import chromadb
 
 import tiktoken
 
+import anthropic
 import cohere
 
 from lightrag import LightRAG, QueryParam
@@ -59,6 +60,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent.absolute()
 DATABASE_PATH = Path(os.environ["DATABASE_PATH"])
 
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 COHERE_API_KEY = os.environ["COHERE_API_KEY"]
 
 PASSWORD_SALT = os.environ["PASSWORD_SALT"]
@@ -243,12 +245,26 @@ class CohereTokenizer:
     def __init__(self):
         super().__init__()
 
-        self._co = cohere.ClientV2(api_key=COHERE_API_KEY)
+        self._client = cohere.ClientV2(api_key=COHERE_API_KEY)
 
     def encode(self, text, *args, **kwargs):
-        response = self._co.tokenize(
+        response = self._client.tokenize(
             *args, text=text, model="command-r-08-2024", **kwargs)
         return response.tokens
+
+
+# Temporary
+class AnthropicTokenizer:
+    def __init__(self):
+        super().__init__()
+
+        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    def encode(self, text, *args, **kwargs):
+        response = self._client.beta.messages.count_tokens(
+            messages=[{"role": "user", "content": text}],
+            model=LLM_CLAUDE_HAIKU)
+        return [0] * response.input_tokens  # FIXME: dirty hack
 
 
 async def index_query(index,
@@ -377,10 +393,14 @@ async def index_query_naive(index,
             embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
-            tokenizer=Anthropic(model=model).tokenizer)
+            # tokenizer=Anthropic().tokenizer,
+            tokenizer=AnthropicTokenizer(),
+        )
 
         token_counter = TokenCountingHandler(
-            tokenizer=Anthropic(model=model).tokenizer)
+            # tokenizer=Anthropic().tokenizer,
+            tokenizer=AnthropicTokenizer().encode,
+        )
         query_engine.callback_manager.add_handler(token_counter)
 
     # Cohere
@@ -506,13 +526,16 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 embed_batch_size=EMBED_BATCH_SIZE),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
-            tokenizer=Anthropic(model=model).tokenizer,
+            # tokenizer=Anthropic().tokenizer,
+            tokenizer=AnthropicTokenizer(),
             node_postprocessors=[non_existing_files_filter,
                                  file_path_filter,
                                  cohere_rerank])
 
         token_counter = TokenCountingHandler(
-            tokenizer=Anthropic(model=model).tokenizer)
+            # tokenizer=Anthropic().tokenizer,
+            tokenizer=AnthropicTokenizer().encode,
+        )
         query_engine.callback_manager.add_handler(token_counter)
 
     # Cohere
