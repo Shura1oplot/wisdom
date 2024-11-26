@@ -733,7 +733,7 @@ def main(argv=sys.argv):
 
                     in_instructions = gr.Textbox(
                         label="Additional instructions",
-                        value="Provide at least 10 presentations.")
+                        value="Provide at least 10 presentations. Be verbose.")
 
                     with gr.Row():
                         in_preset = gr.Dropdown(
