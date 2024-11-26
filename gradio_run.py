@@ -377,10 +377,10 @@ async def index_query_naive(index,
             embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
-            tokenizer=Anthropic().tokenizer)
+            tokenizer=Anthropic(model=model).tokenizer)
 
         token_counter = TokenCountingHandler(
-            tokenizer=Anthropic().tokenizer.encode)
+            tokenizer=Anthropic(model=model).tokenizer)
         query_engine.callback_manager.add_handler(token_counter)
 
     # Cohere
@@ -506,13 +506,13 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                 embed_batch_size=EMBED_BATCH_SIZE),
             text_qa_template=text_qa_template,
             refine_template=refine_template,
-            tokenizer=Anthropic().tokenizer,
+            tokenizer=Anthropic(model=model).tokenizer,
             node_postprocessors=[non_existing_files_filter,
                                  file_path_filter,
                                  cohere_rerank])
 
         token_counter = TokenCountingHandler(
-            tokenizer=Anthropic().tokenizer.encode)
+            tokenizer=Anthropic(model=model).tokenizer)
         query_engine.callback_manager.add_handler(token_counter)
 
     # Cohere
