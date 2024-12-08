@@ -13,6 +13,10 @@ from llama_index.core import Settings
 
 from llama_index.core import VectorStoreIndex
 from llama_index.core import StorageContext
+from llama_index.core.retrievers import QueryFusionRetriever
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.retrievers.bm25 import BM25Retriever
+from llama_index.core.response_synthesizers import CompactAndRefine
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 
@@ -20,10 +24,6 @@ from llama_index.llms.openai import OpenAI
 from llama_index.llms.anthropic import Anthropic
 from llama_index.llms.cohere import Cohere
 import llama_index.llms.cohere.utils as cohere_utils
-
-from llama_index.core import MockEmbedding
-from llama_index.core.llms import MockLLM
-from llama_index.core.callbacks import TokenCountingHandler
 
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core import ChatPromptTemplate
@@ -37,13 +37,7 @@ from llama_index.postprocessor.cohere_rerank import CohereRerank
 
 import chromadb
 
-import tiktoken
-
-import anthropic
-import cohere
-
-from lightrag import LightRAG, QueryParam
-from lightrag.llm import gpt_4o_complete, gpt_4o_mini_complete
+import Stemmer
 
 import gradio as gr
 
@@ -66,19 +60,15 @@ COHERE_API_KEY = os.environ["COHERE_API_KEY"]
 PASSWORD_SALT = os.environ["PASSWORD_SALT"]
 
 LLM_GPT_4 = "gpt-4o-2024-11-20"
-LLM_GPT_4_MINI = "gpt-4o-mini-2024-07-18"
 LLM_CLAUDE_SONNET = "claude-3-5-sonnet-20241022"
-LLM_CLAUDE_HAIKU = "claude-3-5-haiku-20241022",
 LLM_COHERE_COMMAND_R_PLUS = "command-r-plus-08-2024"
-LLM_COHERE_COMMAND_R = "command-r-08-2024"
-RERANK_COHERE_ENGLISH = "rerank-english-v3.0"
-RERANK_COHERE_MULTILANG = "rerank-multilingual-v3.0"
+RERANK_COHERE = "rerank-v3.5"
 
 MODEL_EMBEDDING = "text-embedding-3-large"
 EMBED_MODEL_DIM = 3072
 EMBED_BATCH_SIZE = 256
 
-LLM_ENHANCE_QUERY = LLM_GPT_4
+LLM_ENHANCE_QUERY = LLM_CLAUDE_SONNET
 
 TEMPERATURE_DEFAULT = 0.0
 MAX_TOKENS_DEFAULT = 4096
@@ -93,65 +83,28 @@ GRADIO_ROOT_PATH = os.environ.get("GRADIO_ROOT_PATH", "/wisdom")
 
 RESTRICTED_FILE_PATH = os.environ["RESTRICTED_FILE_PATH"]
 
-### PRESETS ###
+### DEFAULTS ###
 
-# FIXME: add GraphRAG params
-PRESETS_MODELS_MINI = {
-    "openai": LLM_GPT_4_MINI,
-    "anthropic": LLM_CLAUDE_HAIKU,
-    "cohere": LLM_COHERE_COMMAND_R,
-}
-PRESETS_MODELS_LARGE = {
+DEFAULT_SIM_TOP_K = int(os.environ["DEFAULT_SIM_TOP_K"])
+DEFAULT_RERANK_TOP_N = int(os.environ["DEFAULT_RERANK_TOP_N"])
+DEFAULT_ENHANCE_QUERY = bool(int(os.environ["DEFAULT_ENHANCE_QUERY"]))
+
+DEFAULT_LLM_PROVIDER = os.environ["DEFAULT_LLM_PROVIDER"]
+DEFAULT_LLM_MODEL = {
     "openai": LLM_GPT_4,
     "anthropic": LLM_CLAUDE_SONNET,
     "cohere": LLM_COHERE_COMMAND_R_PLUS,
-}
-PRESETS = {
-    "documents":      (100, 30,  PRESETS_MODELS_LARGE, False),
-    "more_docs":      (100, 100, PRESETS_MODELS_MINI,  False),
-    "smart_response": (100, 30,  PRESETS_MODELS_LARGE, True)
-}
-
-DEFAULT_PRESET = os.environ["DEFAULT_PRESET"]
-DEFAULT_PROVIDER = os.environ["DEFAULT_PROVIDER"]
-
-DEFAULT_SIM_TOP_K, DEFAULT_RERANK_TOP_N, DEFAULT_LLM_MODELS, \
-    DEFAULT_ENHANCE_QUERY = PRESETS[DEFAULT_PRESET]
-DEFAULT_LLM_MODEL = DEFAULT_LLM_MODELS[DEFAULT_PROVIDER]
-
-### COST ###
-
-# https://openai.com/api/pricing/
-# https://www.anthropic.com/pricing#anthropic-api
-# https://cohere.com/pricing
-MODEL_PRICE = {"gpt-4o-2024-08-06":          [ 2.500, 10.000],
-               "gpt-4o-2024-11-20":          [ 2.500, 10.000],
-               "gpt-4o-mini-2024-07-18":     [ 0.150,  0.600],
-               "o1-preview-2024-09-12":      [15.000, 60.000],
-               "claude-3-haiku-20240307":    [ 0.250,  1.250],
-               "claude-3-5-haiku-20241022":  [ 1.000,  5.000],
-               "claude-3-5-sonnet-20240620": [ 3.000, 15.000],
-               "claude-3-5-sonnet-20241022": [ 3.000, 15.000],
-               "command-r-plus-08-2024":     [ 2.500, 10.000],
-               "command-r-08-2024":          [ 0.150,  0.600]}
-
-EMBEDDING_PRICE = {
-    "text-embedding-3-large":  0.130,  # OpenAI
-    "embed-multilingual-v3.0": 0.100,  # Cohere
-}
-
-COHERE_RERANK_PRICE = 2.0 / 1000
+}[DEFAULT_LLM_PROVIDER]
 
 
 ################################################################################
 
 
 def _path_cohere_utils():
-    for model in (LLM_COHERE_COMMAND_R_PLUS, LLM_COHERE_COMMAND_R):
-        cohere_utils.COMMAND_MODELS[model] = 128000
-        cohere_utils.ALL_AVAILABLE_MODELS[model] = 128000
-        cohere_utils.CHAT_MODELS[model] = 128000
-        cohere_utils.FUNCTION_CALLING_MODELS.add(model)
+    cohere_utils.COMMAND_MODELS[LLM_COHERE_COMMAND_R_PLUS] = 128_000
+    cohere_utils.ALL_AVAILABLE_MODELS[LLM_COHERE_COMMAND_R_PLUS] = 128_000
+    cohere_utils.CHAT_MODELS[LLM_COHERE_COMMAND_R_PLUS] = 128_000
+    cohere_utils.FUNCTION_CALLING_MODELS.add(LLM_COHERE_COMMAND_R_PLUS)
 
 
 _path_cohere_utils()
@@ -165,15 +118,6 @@ def load_prompt(type_, role, lang):
 
     with open(file_path, encoding="utf-8") as fp:
         return fp.read()
-
-
-def calculate_cost(model, token_counter):
-    return token_counter.total_embedding_token_count \
-        * EMBEDDING_PRICE[MODEL_EMBEDDING] / 1_000_000 + \
-        token_counter.prompt_llm_token_count * MODEL_PRICE[model][0] \
-        / 1_000_000 + \
-        token_counter.completion_llm_token_count * MODEL_PRICE[model][1] \
-        / 1_000_000
 
 
 class OutputParser(BaseOutputParser):
@@ -241,32 +185,6 @@ class FilePathFilterPostprocessor(BaseNodePostprocessor):
         return new_nodes
 
 
-class CohereTokenizer:
-    def __init__(self):
-        super().__init__()
-
-        self._client = cohere.ClientV2(api_key=COHERE_API_KEY)
-
-    def encode(self, text, *args, **kwargs):
-        response = self._client.tokenize(
-            *args, text=text, model="command-r-08-2024", **kwargs)
-        return response.tokens
-
-
-# Temporary
-class AnthropicTokenizer:
-    def __init__(self):
-        super().__init__()
-
-        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-    def encode(self, text, *args, **kwargs):
-        response = self._client.beta.messages.count_tokens(
-            messages=[{"role": "user", "content": text}],
-            model=LLM_CLAUDE_SONNET)
-        return [0] * response.input_tokens  # FIXME: dirty hack
-
-
 async def index_query(index,
                       query,
                       instructions,
@@ -275,9 +193,6 @@ async def index_query(index,
                       rerank_top_n,
                       model,
                       exclude_files_str,
-                      use_graphrag,
-                      graphrag_mode,
-                      graphrag_top_k,
                       include_restricted):
     ### Checks ###
 
@@ -309,49 +224,6 @@ async def index_query(index,
             language = "ru"
             break
 
-    ### Call RAG ###
-
-    if use_graphrag:
-        if model not in (LLM_GPT_4, LLM_GPT_4_MINI):
-            raise gr.Error(f"Unsupported model for GraphRAG: {model}")
-
-        if query_enhance:
-            raise gr.Error("Enhance query is unsopported for GraphRAG")
-
-        if exclude_files_str:
-            raise gr.Error("Exclude files is unsopported for GraphRAG")
-
-        if instructions:
-            raise gr.Error("Additional instructions are unsopported for GraphRAG")
-
-        return await index_query_graphrag(query,
-                                          language,
-                                          model,
-                                          graphrag_mode,
-                                          graphrag_top_k)
-
-    return await index_query_naive(index,
-                                   query,
-                                   language,
-                                   instructions,
-                                   query_enhance,
-                                   similarity_top_k,
-                                   rerank_top_n,
-                                   model,
-                                   exclude_files_str,
-                                   include_restricted)
-
-
-async def index_query_naive(index,
-                            query,
-                            language,
-                            instructions,
-                            query_enhance,
-                            similarity_top_k,
-                            rerank_top_n,
-                            model,
-                            exclude_files_str,
-                            include_restricted):
     ### Prepare templates ###
 
     text_qa_template = ChatPromptTemplate([
@@ -383,90 +255,8 @@ async def index_query_naive(index,
         ChatMessage(role=MessageRole.USER,
                     content=load_prompt("q_enhance", "user", language))])
 
-    ### Estimate cost ###
-
-    # Anthropic
-    if model.startswith("claude-"):
-        query_engine = index.as_query_engine(
-            similarity_top_k=rerank_top_n,
-            llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
-            embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
-            text_qa_template=text_qa_template,
-            refine_template=refine_template,
-            # tokenizer=Anthropic().tokenizer,
-            tokenizer=AnthropicTokenizer(),
-        )
-
-        token_counter = TokenCountingHandler(
-            # tokenizer=Anthropic().tokenizer,
-            tokenizer=AnthropicTokenizer().encode,
-        )
-        query_engine.callback_manager.add_handler(token_counter)
-
-    # Cohere
-    elif model.startswith("command-"):
-        query_engine = index.as_query_engine(
-            similarity_top_k=rerank_top_n,
-            llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
-            embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
-            text_qa_template=text_qa_template,
-            refine_template=refine_template,
-            tokenizer=CohereTokenizer())
-
-        token_counter = TokenCountingHandler(
-            tokenizer=CohereTokenizer().encode)
-        query_engine.callback_manager.add_handler(token_counter)
-
-    # OpenAI
-    elif model.startswith("gpt-") or model.startswith("o1-"):
-        query_engine = index.as_query_engine(
-            similarity_top_k=rerank_top_n,
-            llm=MockLLM(max_tokens=MOCK_LLM_MAX_TOKENS),
-            embed_model=MockEmbedding(embed_dim=EMBED_MODEL_DIM),
-            text_qa_template=text_qa_template,
-            refine_template=refine_template)
-
-        token_counter = TokenCountingHandler(
-            tokenizer=tiktoken.encoding_for_model(model).encode)
-        query_engine.callback_manager.add_handler(token_counter)
-
-    else:
-        raise ValueError(model)
-
-    await query_engine.aquery(query)
-
-    estimated_cost_query = calculate_cost(model, token_counter)
-
-    if query_enhance:
-        llm = MockLLM(max_tokens=int(len(query) / 4 * 2))
-
-        token_counter = TokenCountingHandler(
-            tokenizer=tiktoken.encoding_for_model(LLM_GPT_4).encode)
-        llm.callback_manager.add_handler(token_counter)
-
-        await llm.apredict(q_enhance_template, query_str=query)
-
-        estimated_cost_q_enhance = calculate_cost(
-            LLM_ENHANCE_QUERY, token_counter)
-
-    else:
-        estimated_cost_q_enhance = 0
-
-    estimated_cost_total = estimated_cost_query + estimated_cost_q_enhance \
-        + COHERE_RERANK_PRICE
-
-    gr.Info(f"Estimated cost is ${estimated_cost_total:.4f}")
-
-    if estimated_cost_total >= COST_THRESHOLD:
-        raise gr.Error((f"""\
-Estimated cost of ${estimated_cost_total:.2f} is above the allowed \
-threshold ${COST_THRESHOLD:.2f}. Try cheaper models (claude-3-haiku \
-or gpt-4o-mini) or decrease index similarity top_k parameter.\
-"""))
-
     ### Query enhance ###
 
-    q_enhance_cost = 0
     enhanced_query = None
 
     if query_enhance:
@@ -475,24 +265,14 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
                      max_tokens=MAX_TOKENS_DEFAULT,
                      output_parser=OutputParser())
 
-        token_counter = TokenCountingHandler(
-            tokenizer=tiktoken.encoding_for_model(LLM_GPT_4).encode)
-        llm.callback_manager.add_handler(token_counter)
-
         enhanced_query = await llm.apredict(
-            q_enhance_template, query_str=query)
+            q_enhance_template,
+            query_str=query)
         query = enhanced_query
-
-        q_enhance_cost = calculate_cost(LLM_ENHANCE_QUERY, token_counter)
 
     ### Query ###
 
-    if language == "en":
-        cohere_model = RERANK_COHERE_ENGLISH
-    else:
-        cohere_model = RERANK_COHERE_MULTILANG
-
-    cohere_rerank = CohereRerank(model=cohere_model,
+    cohere_rerank = CohereRerank(model=RERANK_COHERE,
                                  top_n=rerank_top_n)
 
     non_existing_files_filter = NonExistingFilesFilterPostprocessor()
@@ -512,107 +292,68 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     file_path_filter = FilePathFilterPostprocessor(
         ignore_file_paths=ignore_file_paths)
 
+    language_full = {
+        "ru": "russian",
+        "en": "english",
+    }[language]
+
+    vector_retriever = index.as_retriever(
+        similarity_top_k=similarity_top_k,
+        embed_model=OpenAIEmbedding(
+            model=MODEL_EMBEDDING,
+            embed_batch_size=EMBED_BATCH_SIZE))
+
+    bm25_retriever = BM25Retriever.from_defaults(
+        docstore=index.docstore,
+        similarity_top_k=similarity_top_k,
+        stemmer=Stemmer.Stemmer(language_full),
+        language=language_full),
+
+    fusion_retriever = QueryFusionRetriever(
+        retrievers=[vector_retriever, bm25_retriever],
+        num_queries=1)
+
     # Anthropic
     if model.startswith("claude-"):
-        query_engine = index.as_query_engine(
-            similarity_top_k=similarity_top_k,
-            llm=Anthropic(
-                model=model,
-                temperature=TEMPERATURE_DEFAULT,
-                max_tokens=MAX_TOKENS_DEFAULT,
-                output_parser=OutputParser()),
-            embed_model=OpenAIEmbedding(
-                model=MODEL_EMBEDDING,
-                embed_batch_size=EMBED_BATCH_SIZE),
-            text_qa_template=text_qa_template,
-            refine_template=refine_template,
-            # tokenizer=Anthropic().tokenizer,
-            tokenizer=AnthropicTokenizer(),
-            node_postprocessors=[non_existing_files_filter,
-                                 file_path_filter,
-                                 cohere_rerank])
-
-        token_counter = TokenCountingHandler(
-            # tokenizer=Anthropic().tokenizer,
-            tokenizer=AnthropicTokenizer().encode,
-        )
-        query_engine.callback_manager.add_handler(token_counter)
+        llm = Anthropic(
+            model=model,
+            temperature=TEMPERATURE_DEFAULT,
+            max_tokens=MAX_TOKENS_DEFAULT,
+            output_parser=OutputParser())
 
     # Cohere
     elif model.startswith("command-"):
-        query_engine = index.as_query_engine(
-            similarity_top_k=similarity_top_k,
-            llm=Cohere(
-                model=model,
-                temperature=TEMPERATURE_DEFAULT,
-                max_tokens=MAX_TOKENS_DEFAULT,
-                output_parser=OutputParser()),
-            embed_model=OpenAIEmbedding(
-                model=MODEL_EMBEDDING,
-                embed_batch_size=EMBED_BATCH_SIZE),
-            text_qa_template=text_qa_template,
-            refine_template=refine_template,
-            tokenizer=CohereTokenizer(),
-            node_postprocessors=[non_existing_files_filter,
-                                 file_path_filter,
-                                 cohere_rerank])
-
-        token_counter = TokenCountingHandler(
-            tokenizer=CohereTokenizer().encode)
-        query_engine.callback_manager.add_handler(token_counter)
+        llm = Cohere(
+            model=model,
+            temperature=TEMPERATURE_DEFAULT,
+            max_tokens=MAX_TOKENS_DEFAULT,
+            output_parser=OutputParser()),
 
     # OpenAI: gpt-4o
     elif model.startswith("gpt-"):
-        query_engine = index.as_query_engine(
-            similarity_top_k=similarity_top_k,
-            llm=OpenAI(
-                model=model,
-                temperature=TEMPERATURE_DEFAULT,
-                max_tokens=MAX_TOKENS_DEFAULT,
-                output_parser=OutputParser()),
-            embed_model=OpenAIEmbedding(
-                model=MODEL_EMBEDDING,
-                embed_batch_size=EMBED_BATCH_SIZE),
-            text_qa_template=text_qa_template,
-            refine_template=refine_template,
-            node_postprocessors=[non_existing_files_filter,
-                                 file_path_filter,
-                                 cohere_rerank])
-
-        token_counter = TokenCountingHandler(
-            tokenizer=tiktoken.encoding_for_model(model).encode)
-        query_engine.callback_manager.add_handler(token_counter)
-
-    # OpenAI: o1
-    elif model.startswith("o1-"):
-        query_engine = index.as_query_engine(
-            similarity_top_k=similarity_top_k,
-            llm=OpenAI(
-                model=model,
-                temperature=TEMPERATURE_DEFAULT,
-                # max_tokens=MAX_TOKENS_DEFAULT,
-                output_parser=OutputParser()),
-            embed_model=OpenAIEmbedding(
-                model=MODEL_EMBEDDING,
-                embed_batch_size=EMBED_BATCH_SIZE),
-            text_qa_template=text_qa_template,
-            refine_template=refine_template,
-            node_postprocessors=[non_existing_files_filter,
-                                 file_path_filter,
-                                 cohere_rerank])
-
-        token_counter = TokenCountingHandler(
-            tokenizer=tiktoken.encoding_for_model(model).encode)
-        query_engine.callback_manager.add_handler(token_counter)
+        llm = OpenAI(
+            model=model,
+            temperature=TEMPERATURE_DEFAULT,
+            max_tokens=MAX_TOKENS_DEFAULT,
+            output_parser=OutputParser()),
 
     else:
         raise ValueError(model)
 
+    synthesizer = CompactAndRefine(
+        llm=llm,
+        text_qa_template=text_qa_template,
+        refine_template=refine_template)
+
+    query_engine = RetrieverQueryEngine(
+        retriever=fusion_retriever,
+        response_synthesizer=synthesizer,
+        node_postprocessors=[non_existing_files_filter,
+                             file_path_filter,
+                             cohere_rerank])
+
     response_obj = await query_engine.aquery(query)
     response = response_obj.response
-
-    query_cost = calculate_cost(model, token_counter) \
-        + COHERE_RERANK_PRICE
 
     ### Mentioned files ###
 
@@ -633,55 +374,8 @@ or gpt-4o-mini) or decrease index similarity top_k parameter.\
     return (response,
             mentioned_files_table,
             mentioned_files_str,
-            q_enhance_cost + query_cost,
             None,
             enhanced_query)
-
-
-async def index_query_graphrag(query,
-                               language,
-                               model,
-                               mode,
-                               top_k):
-    # FIXME: cost calculation
-
-    llm_model_func = gpt_4o_complete
-
-    if model == LLM_GPT_4_MINI:
-        llm_model_func = gpt_4o_mini_complete
-
-    if language == "ru":
-        pass  # FIXME: patch lightrag prompth
-
-    graphrag = LightRAG(
-        working_dir=BASE_DIR / "graphrag",
-        llm_model_func=llm_model_func)
-
-    response = await graphrag.aquery(
-        query, param=QueryParam(mode=mode,
-                                top_k=top_k))
-
-    return (response,
-            None,
-            None,
-            None,
-            None,
-            None)
-
-
-def apply_preset(preset, provider):
-    try:
-        similarity_top_k, rerank_top_n, models, q_enhance \
-            = PRESETS[preset]
-    except KeyError:
-        raise gr.Error(f"Unknown preset: {preset}")
-
-    try:
-        model = models[provider]
-    except KeyError:
-        raise gr.Error(f"Unknown provider: {provider}")
-
-    return similarity_top_k, rerank_top_n, model, q_enhance
 
 
 def auth(username, password):
@@ -736,22 +430,16 @@ def main(argv=sys.argv):
                         value="Provide at least 10 presentations. Be verbose.")
 
                     with gr.Row():
-                        in_preset = gr.Dropdown(
-                            label="Preset",
-                            choices=[("Documents (large LLM)",
-                                      "documents"),
-                                     ("Documents (small LLM)",
-                                      "more_docs"),
-                                     ("Smart response",
-                                      "smart_response")],
-                            value=DEFAULT_PRESET)
+                        in_model = gr.Dropdown(
+                            label="Model",
+                            choices=[("GPT-4o",        LLM_GPT_4),
+                                     ("Claude Sonnet", LLM_CLAUDE_SONNET),
+                                     ("Command R+",    LLM_COHERE_COMMAND_R_PLUS)],
+                            value=DEFAULT_LLM_MODEL)
 
-                        in_provider = gr.Dropdown(
-                            label="Provider",
-                            choices=[("OpenAI",    "openai"),
-                                     ("Anthropic", "anthropic"),
-                                     ("Cohere",    "cohere")],
-                            value=DEFAULT_PROVIDER)
+                        in_q_enhance = gr.Checkbox(
+                            label="Optimize query",
+                            value=DEFAULT_ENHANCE_QUERY)
 
                     btn_submit = gr.Button("Submit")
 
@@ -767,65 +455,26 @@ def main(argv=sys.argv):
                 gr.Examples(
                     examples=[
                         ["Find presentations about safety stock management.",
-                         "Provide at least 10 presentations.",
-                         "documents",
-                         "cohere"],
+                         "Provide at least 10 presentations."],
                         ["Найди материалы по стратегическим фреймворкам.",
-                         "Приведи не менее 10 презентаций.",
-                         "more_docs",
-                         "openai"],
-                        ["What KPIs do exist in logistics?",
-                         "",
-                         "smart_response",
-                         "cohere"]],
-                    inputs=[in_query, in_instructions, in_preset, in_provider])
+                         "Приведи не менее 10 презентаций."],
+                        ["What metrics and KPIs do exist in logistics?",
+                         ""]],
+                    inputs=[in_query, in_instructions])
 
         with gr.Tab("Options"):
             with gr.Group():
                 in_similarity_top_k = gr.Number(
                     label="Index similarity top_k",
                     minimum=1,
-                    maximum=1000,
+                    maximum=100,
                     value=DEFAULT_SIM_TOP_K)
 
                 in_rerank_top_n = gr.Number(
                     label="Index rerank top_n",
                     minimum=1,
-                    maximum=1000,
+                    maximum=30,
                     value=DEFAULT_RERANK_TOP_N)
-
-                in_model = gr.Dropdown(
-                    label="Model",
-                    choices=[("GPT-4o-mini",   LLM_GPT_4_MINI),
-                             ("GPT-4o",        LLM_GPT_4),
-                             ("Claude Haiku",  LLM_CLAUDE_HAIKU),
-                             ("Claude Sonnet", LLM_CLAUDE_SONNET),
-                             ("Command R+",    LLM_COHERE_COMMAND_R_PLUS),
-                             ("Command R",     LLM_COHERE_COMMAND_R)],
-                    value=DEFAULT_LLM_MODEL)
-
-                in_q_enhance = gr.Checkbox(
-                    label="Optimize query using LLM",
-                    value=DEFAULT_ENHANCE_QUERY)
-
-            with gr.Group():
-                in_use_graphrag = gr.Checkbox(
-                    label="Use GraphRAG",
-                    value=False)
-
-                in_graphrag_mode = gr.Dropdown(
-                    label="GraphRAG mode",
-                    choices=[("Local",  "local"),
-                             ("Global", "global"),
-                             ("Hybrid", "hybrid"),
-                             ("Naive",  "naive")],
-                    value="global")
-
-                in_graphrag_top_k = gr.Number(
-                    label="GraphRAG top_k",
-                    minimum=1,
-                    maximum=1000,
-                    value=60)  # FIXME
 
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
@@ -839,8 +488,6 @@ def main(argv=sys.argv):
                 btn_filter_clear = gr.Button("Clear")
 
         with gr.Tab("Debug"):
-            out_cost = gr.Number(label="Cost charged, USD")
-
             out_enhanced_prompt = gr.TextArea(
                 label="Enhanced prompt")
 
@@ -862,14 +509,10 @@ def main(argv=sys.argv):
                     in_rerank_top_n,
                     in_model,
                     in_filter_file_paths,
-                    in_use_graphrag,
-                    in_graphrag_mode,
-                    in_graphrag_top_k,
                     in_include_restricted],
             outputs=[out_response,
                      out_docs,
                      out_file_paths,
-                     out_cost,
                      out_file,
                      out_enhanced_prompt])
 
@@ -902,22 +545,6 @@ def main(argv=sys.argv):
             fn=fn_filter_clear,
             inputs=[],
             outputs=[in_filter_file_paths])
-
-        in_preset.change(
-            fn=apply_preset,
-            inputs=[in_preset, in_provider],
-            outputs=[in_similarity_top_k,
-                     in_rerank_top_n,
-                     in_model,
-                     in_q_enhance])
-
-        in_provider.change(
-            fn=apply_preset,
-            inputs=[in_preset, in_provider],
-            outputs=[in_similarity_top_k,
-                     in_rerank_top_n,
-                     in_model,
-                     in_q_enhance])
 
     ############################################################################
 
