@@ -71,8 +71,8 @@ LLM_CLAUDE_SONNET = "claude-3-5-sonnet-20241022"
 LLM_CLAUDE_HAIKU = "claude-3-5-haiku-20241022",
 LLM_COHERE_COMMAND_R_PLUS = "command-r-plus-08-2024"
 LLM_COHERE_COMMAND_R = "command-r-08-2024"
-RERANK_COHERE_ENGLISH = "rerank-english-v3.0"
-RERANK_COHERE_MULTILANG = "rerank-multilingual-v3.0"
+RERANK_COHERE_ENGLISH = "rerank-v3.5"
+RERANK_COHERE_MULTILANG = "rerank-v3.5"
 
 MODEL_EMBEDDING = "text-embedding-3-large"
 EMBED_MODEL_DIM = 3072
