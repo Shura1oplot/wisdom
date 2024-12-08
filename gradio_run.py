@@ -4,6 +4,7 @@ import sys
 import os
 import hashlib
 from pathlib import Path
+import pickle
 
 from typing import List
 
@@ -72,8 +73,6 @@ LLM_ENHANCE_QUERY = LLM_CLAUDE_SONNET
 
 TEMPERATURE_DEFAULT = 0.0
 MAX_TOKENS_DEFAULT = 4096
-
-COST_THRESHOLD = float(os.environ["COST_THRESHOLD"])
 
 MOCK_LLM_MAX_TOKENS = 50
 
@@ -186,6 +185,7 @@ class FilePathFilterPostprocessor(BaseNodePostprocessor):
 
 
 async def index_query(index,
+                      nodes,
                       query,
                       instructions,
                       query_enhance,
@@ -303,15 +303,17 @@ async def index_query(index,
             model=MODEL_EMBEDDING,
             embed_batch_size=EMBED_BATCH_SIZE))
 
-    bm25_retriever = BM25Retriever.from_defaults(
-        docstore=index.docstore,
+    bm25_retriever = BM25Retriever(
+        nodes=nodes,
         similarity_top_k=similarity_top_k,
         stemmer=Stemmer.Stemmer(language_full),
-        language=language_full),
+        language=language_full)
 
     fusion_retriever = QueryFusionRetriever(
         retrievers=[vector_retriever, bm25_retriever],
-        num_queries=1)
+        similarity_top_k=similarity_top_k,
+        num_queries=1,
+        mode="relative_score")
 
     # Anthropic
     if model.startswith("claude-"):
@@ -327,7 +329,7 @@ async def index_query(index,
             model=model,
             temperature=TEMPERATURE_DEFAULT,
             max_tokens=MAX_TOKENS_DEFAULT,
-            output_parser=OutputParser()),
+            output_parser=OutputParser())
 
     # OpenAI: gpt-4o
     elif model.startswith("gpt-"):
@@ -335,7 +337,7 @@ async def index_query(index,
             model=model,
             temperature=TEMPERATURE_DEFAULT,
             max_tokens=MAX_TOKENS_DEFAULT,
-            output_parser=OutputParser()),
+            output_parser=OutputParser())
 
     else:
         raise ValueError(model)
@@ -401,9 +403,9 @@ def auth(username, password):
 
 
 def main(argv=sys.argv):
-    Settings.embed_model = OpenAIEmbedding(
-        model=MODEL_EMBEDDING,
-        embed_batch_size=EMBED_BATCH_SIZE)
+    # Settings.embed_model = OpenAIEmbedding(
+    #     model=MODEL_EMBEDDING,
+    #     embed_batch_size=EMBED_BATCH_SIZE)
 
     chroma_db = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
     chroma_collection = chroma_db.get_or_create_collection("wisdom")
@@ -411,35 +413,40 @@ def main(argv=sys.argv):
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
     index = VectorStoreIndex.from_vector_store(
-        vector_store, storage_context=storage_context)
+        vector_store,
+        storage_context=storage_context)
 
+    with open(BASE_DIR / "documents.pickle", "rb") as fp:
+        nodes = pickle.load(fp)
+    
     ############################################################################
 
     with gr.Blocks() as demo:
         with gr.Tab("General"):
             with gr.Row():
                 with gr.Column():  # Request and response
-                    out_response = gr.TextArea(
-                        label="AI response")
+                    with gr.Row():
+                        out_response = gr.TextArea(
+                            label="AI response")
 
                     in_query = gr.Textbox(
                         label="User's query")
+
+                    in_q_enhance = gr.Checkbox(
+                        label=("Optimize query (may increase the number of "
+                               "documents but decrease relevance)"),
+                        value=DEFAULT_ENHANCE_QUERY)
 
                     in_instructions = gr.Textbox(
                         label="Additional instructions",
                         value="Provide at least 10 presentations. Be verbose.")
 
-                    with gr.Row():
-                        in_model = gr.Dropdown(
-                            label="Model",
-                            choices=[("GPT-4o",        LLM_GPT_4),
-                                     ("Claude Sonnet", LLM_CLAUDE_SONNET),
-                                     ("Command R+",    LLM_COHERE_COMMAND_R_PLUS)],
-                            value=DEFAULT_LLM_MODEL)
-
-                        in_q_enhance = gr.Checkbox(
-                            label="Optimize query",
-                            value=DEFAULT_ENHANCE_QUERY)
+                    in_model = gr.Dropdown(
+                        label="Model",
+                        choices=[("GPT-4o",        LLM_GPT_4),
+                                 ("Claude Sonnet", LLM_CLAUDE_SONNET),
+                                 ("Command R+",    LLM_COHERE_COMMAND_R_PLUS)],
+                        value=DEFAULT_LLM_MODEL)
 
                     btn_submit = gr.Button("Submit")
 
@@ -462,20 +469,6 @@ def main(argv=sys.argv):
                          ""]],
                     inputs=[in_query, in_instructions])
 
-        with gr.Tab("Options"):
-            with gr.Group():
-                in_similarity_top_k = gr.Number(
-                    label="Index similarity top_k",
-                    minimum=1,
-                    maximum=100,
-                    value=DEFAULT_SIM_TOP_K)
-
-                in_rerank_top_n = gr.Number(
-                    label="Index rerank top_n",
-                    minimum=1,
-                    maximum=30,
-                    value=DEFAULT_RERANK_TOP_N)
-
         with gr.Tab("Filter"):
             out_file_paths = gr.TextArea(
                 label="Found files (last query)")
@@ -486,6 +479,20 @@ def main(argv=sys.argv):
             with gr.Row():
                 btn_filter_copy = gr.Button("Copy to ignore")
                 btn_filter_clear = gr.Button("Clear")
+
+        with gr.Tab("Options"):
+            with gr.Group():
+                in_similarity_top_k = gr.Number(
+                    label="Index similarity top_k",
+                    minimum=1,
+                    maximum=300,
+                    value=DEFAULT_SIM_TOP_K)
+
+                in_rerank_top_n = gr.Number(
+                    label="Index rerank top_n",
+                    minimum=1,
+                    maximum=50,
+                    value=DEFAULT_RERANK_TOP_N)
 
         with gr.Tab("Debug"):
             out_enhanced_prompt = gr.TextArea(
@@ -498,7 +505,7 @@ def main(argv=sys.argv):
         ########################################################################
 
         async def fn_submit(*args):
-            return await index_query(index, *args)
+            return await index_query(index, nodes, *args)
 
         btn_submit.click(
             fn=fn_submit,
