@@ -124,7 +124,7 @@ class OutputParser(BaseOutputParser):
     def parse(self, output):
         for tag in ("refined_answer",
                     "уточненный_ответ",
-                    "answer",
+                    "response",
                     "ответ",
                     "enhanced_query",
                     "улучшенный_запрос"):

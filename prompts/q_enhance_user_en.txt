@@ -1,18 +1,3 @@
-# Instructions:
-
-<instructions>
-You are an AI assistant tasked with reformulating user queries to improve retrieval in a RAG system.
-Given the original query, rewrite it to be more specific, detailed, and likely to retrieve relevant information.
-
-How to enhance user's queries:
-1. Analyze the user's query: what does the user want to know? What information related to the original query would the user also find useful to know? Decompose the query into smaller, more granular second-order queries for a better search in the index. Add relevant keywords if necessary. Decode but preserve abbreviations and acronyms. Correct spelling. Enclose this analysis in XML tags <reasoning> and </reasoning>.
-2. Synthesize an enhanced query for the RAG system. Enclose the enhanced query in XML tags <enhanced_query> and </enhanced_query>.
-</instructions>
-
----------------------
-
-# User's query:
-
 <query>
 {query_str}
 </query>
