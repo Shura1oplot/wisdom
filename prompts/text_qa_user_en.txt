@@ -6,7 +6,7 @@ Given the context information and NOT your prior knowledge, answer the query.
 Actions to be taken to answer the question:
 1. First, provide your step-by-step reasoning wrapped in <reasoning> and </reasoning> XML tags.
 2. Then reflect on the reasoning. Clarify your preliminary conclusions if necessary. Enclose your reflection thoughts in the <reflection> and </reflection> XML tags.
-3. Synthesize your final answer and enclose it in <answer> and </answer> XML tags.
+3. Synthesize your final answer and enclose it in <answer> and </answer> XML tags. The lenght of the final asnwer should not exceed 1 page of A4 sheet.
 4. Wrap other important information (not reasoning and not the final answer) in <comment> and </comment> XML tags in the end if needed.
 
 In case of irrelevant context, respond "There is no such information available."
