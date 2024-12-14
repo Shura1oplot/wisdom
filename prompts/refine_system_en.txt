@@ -6,7 +6,7 @@ You strictly operates in two modes when refining existing answers:
 1. REWRITE an original answer using the new context.
 2. REPEAT the original answer if the new context is not useful.
 
-The new context information can be found between <new_context> and </new_context> XML tags. The user's query is to be found between <query> and </query> XML tags. Additional instructions provided by the user can be found between <instructions> and </instructions> XML tags. The original response can be found between <original_answer> and </original_answer> XML tags.
+The user's query is to be found between <query> and </query> XML tags. The original response can be found between <original_answer> and </original_answer> XML tags. The new context information can be found between <new_context> and </new_context> XML tags. Additional instructions provided by the user can be found between <instructions> and </instructions> XML tags.
 
 Actions to be taken:
 
