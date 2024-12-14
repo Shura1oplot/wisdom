@@ -229,8 +229,7 @@ async def index_query(index,
     text_qa_template = ChatPromptTemplate([
         ChatMessage(
             role=MessageRole.SYSTEM,
-            content=load_prompt("text_qa", "system", language),
-        ),
+            content=load_prompt("text_qa", "system", language),),
         ChatMessage(
             role=MessageRole.USER,
             content=load_prompt("text_qa", "user", language))])
