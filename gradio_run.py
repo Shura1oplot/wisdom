@@ -10,8 +10,6 @@ from typing import List
 
 from dotenv import load_dotenv
 
-from llama_index.core import Settings
-
 from llama_index.core import VectorStoreIndex
 from llama_index.core import StorageContext
 from llama_index.core.retrievers import QueryFusionRetriever
@@ -186,18 +184,22 @@ class FilePathFilterPostprocessor(BaseNodePostprocessor):
 
 async def index_query(index,
                       nodes,
+                      is_new_search,
                       query,
                       instructions,
                       query_enhance,
                       similarity_top_k,
                       rerank_top_n,
                       model,
-                      exclude_files_str,
+                      files_history_str,
                       include_restricted):
+    if is_new_search:
+        files_history_str = ""
+
     ### Checks ###
 
     if not query:
-        return ""
+        raise gr.Error("Empty request")
 
     if similarity_top_k is None:
         raise gr.Error("'Index similarity top_k' should be greater than 0")
@@ -277,7 +279,8 @@ async def index_query(index,
     non_existing_files_filter = NonExistingFilesFilterPostprocessor()
 
     ignore_file_paths = []
-    ignore_file_paths.extend(exclude_files_str.split("\n"))
+
+    ignore_file_paths.extend(files_history_str.split("\n"))
 
     if not include_restricted:
         with open(RESTRICTED_FILE_PATH, encoding="utf-8") as fp:
@@ -368,13 +371,17 @@ async def index_query(index,
     mentioned_files_table = [[x] for x in mentioned_files]
     mentioned_files_table.sort()
 
-    mentioned_files_str = "\n".join(sorted(mentioned_files))
+    ### Files history update ###
+
+    files_history_str = files_history_str.strip()
+    files_history_str += "\n"
+    files_history_str += "\n".join(sorted(mentioned_files_table))
 
     ### End ###
 
     return (response,
             mentioned_files_table,
-            mentioned_files_str,
+            files_history_str,
             None,
             enhanced_query)
 
@@ -402,10 +409,6 @@ def auth(username, password):
 
 
 def main(argv=sys.argv):
-    # Settings.embed_model = OpenAIEmbedding(
-    #     model=MODEL_EMBEDDING,
-    #     embed_batch_size=EMBED_BATCH_SIZE)
-
     chroma_db = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
     chroma_collection = chroma_db.get_or_create_collection("wisdom")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
@@ -431,7 +434,7 @@ def main(argv=sys.argv):
                     in_query = gr.Textbox(
                         label="User's query")
 
-                    in_q_enhance = gr.Checkbox(
+                    in_query_enhance = gr.Checkbox(
                         label=("Optimize query (may increase the number of "
                                "documents but decrease relevance)"),
                         value=DEFAULT_ENHANCE_QUERY)
@@ -447,11 +450,13 @@ def main(argv=sys.argv):
                                  ("Command R+",    LLM_COHERE_COMMAND_R_PLUS)],
                         value=DEFAULT_LLM_MODEL)
 
-                    btn_submit = gr.Button("Submit")
+                    with gr.Row():
+                        btn_new_search = gr.Button("New search")
+                        btn_cont_search = gr.Button("Continue search")
 
                 with gr.Column():  # Documents
                     out_docs = gr.Dataframe(
-                        # label="Documents",
+                        label="Files found",
                         headers=["Path"],
                         datatype=["str"])
 
@@ -468,17 +473,6 @@ def main(argv=sys.argv):
                          ""]],
                     inputs=[in_query, in_instructions])
 
-        with gr.Tab("Filter"):
-            out_file_paths = gr.TextArea(
-                label="Found files (last query)")
-
-            in_filter_file_paths = gr.TextArea(
-                label="Exclude files (next query)")
-
-            with gr.Row():
-                btn_filter_copy = gr.Button("Copy to ignore")
-                btn_filter_clear = gr.Button("Clear")
-
         with gr.Tab("Options"):
             with gr.Group():
                 in_similarity_top_k = gr.Number(
@@ -494,33 +488,56 @@ def main(argv=sys.argv):
                     value=DEFAULT_RERANK_TOP_N)
 
         with gr.Tab("Debug"):
-            out_enhanced_prompt = gr.TextArea(
-                label="Enhanced prompt")
-
             in_include_restricted = gr.Checkbox(
                 label="Option 2",
                 value=False)
 
+            out_enhanced_prompt = gr.TextArea(
+                label="Enhanced prompt")
+
+            inout_files_history = gr.TextArea(
+                label="History")
+
         ########################################################################
 
-        async def fn_submit(*args):
-            return await index_query(index, nodes, *args)
+        async def fn_search(is_new_search, *args):
+            nonlocal index, nodes
 
-        btn_submit.click(
-            fn=fn_submit,
-            inputs=[in_query,
-                    in_instructions,
-                    in_q_enhance,
-                    in_similarity_top_k,
-                    in_rerank_top_n,
-                    in_model,
-                    in_filter_file_paths,
-                    in_include_restricted],
-            outputs=[out_response,
-                     out_docs,
-                     out_file_paths,
-                     out_file,
-                     out_enhanced_prompt])
+            return await index_query(index,
+                                     nodes,
+                                     is_new_search,
+                                     *args)
+
+        async def fn_search_new(*args):
+            return await fn_search(True, *args)
+
+        async def fn_search_continue(*args):
+            return await fn_search(False, *args)
+
+        btn_search_inputs = [in_query,
+                             in_instructions,
+                             in_query_enhance,
+                             in_similarity_top_k,
+                             in_rerank_top_n,
+                             in_model,
+                             inout_files_history,
+                             in_include_restricted]
+
+        btn_search_outputs = [out_response,
+                              out_docs,
+                              inout_files_history,
+                              out_file,
+                              out_enhanced_prompt]
+
+        btn_new_search.click(
+            fn=fn_search_new,
+            inputs=btn_search_inputs,
+            outputs=btn_search_outputs)
+
+        btn_cont_search.click(
+            fn=fn_search_continue,
+            inputs=btn_search_inputs,
+            outputs=btn_search_outputs)
 
         def fn_out_docs_select_callback(evt: gr.SelectData):
             return str(DATABASE_PATH / evt.value.replace("\\", "/"))
@@ -528,29 +545,6 @@ def main(argv=sys.argv):
         out_docs.select(
             fn=fn_out_docs_select_callback,
             outputs=[out_file])
-
-        def fn_filter_copy(in_filter_file_paths, out_file_paths):
-            lst = in_filter_file_paths.split("\n")
-            lst.extend(out_file_paths.split("\n"))
-            lst = [x.strip() for x in lst]
-            lst = [x for x in lst if x]
-            lst = list(set(lst))
-            lst.sort()
-            return "\n".join(lst)
-
-        btn_filter_copy.click(
-            fn=fn_filter_copy,
-            inputs=[in_filter_file_paths,
-                    out_file_paths],
-            outputs=[in_filter_file_paths])
-
-        def fn_filter_clear():
-            return ""
-
-        btn_filter_clear.click(
-            fn=fn_filter_clear,
-            inputs=[],
-            outputs=[in_filter_file_paths])
 
     ############################################################################
 
